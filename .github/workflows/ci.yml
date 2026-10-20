@@ -1,0 +1,356 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Phát hiện conflict: marker còn sót trong code + PR không merge sạch vào main
+  # ---------------------------------------------------------------------------
+  conflict-check:
+    name: Conflict check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (PR head hoặc commit được push)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Quét conflict marker còn sót
+        run: |
+          set -euo pipefail
+          # Chỉ bắt marker ở đầu dòng: <<<<<<< , ||||||| , >>>>>>> và ======= đứng một mình
+          # nằm trong file có marker mở, để tránh false positive với heading Markdown/RST.
+          files=$(git grep -lE '^(<<<<<<<|\|\|\|\|\|\|\||>>>>>>>)( |$)' -- . ':!*.png' ':!*.jpg' ':!*.pdf' || true)
+          if [ -n "$files" ]; then
+            echo "::error::Phát hiện conflict marker chưa được giải quyết:"
+            for f in $files; do
+              git grep -nE '^(<<<<<<<|=======|\|\|\|\|\|\|\||>>>>>>>)( |$)' -- "$f" | while IFS= read -r line; do
+                echo "::error file=${f}::${line}"
+              done
+            done
+            exit 1
+          fi
+          echo "Không có conflict marker."
+
+      - name: Thử merge PR vào nhánh đích
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name  "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git fetch --no-tags origin "$BASE_REF"
+          if git merge --no-commit --no-ff "origin/$BASE_REF" > merge.log 2>&1; then
+            echo "PR merge sạch vào $BASE_REF."
+            git merge --abort || true
+          else
+            cat merge.log
+            echo "::error::PR bị conflict với $BASE_REF. Các file conflict:"
+            git diff --name-only --diff-filter=U | while IFS= read -r f; do
+              echo "::error file=${f}::Conflict với $BASE_REF"
+            done
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 2. Xác định phần nào của monorepo đã thay đổi / đang tồn tại
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend_services: ${{ steps.detect.outputs.backend_services }}
+      ai: ${{ steps.detect.outputs.ai }}
+      ai_eval: ${{ steps.detect.outputs.ai_eval }}
+      frontend: ${{ steps.detect.outputs.frontend }}
+      compose: ${{ steps.detect.outputs.compose }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          ALL=false
+          CHANGED=""
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            CHANGED=$(git diff --name-only "origin/$BASE_REF...HEAD")
+            # Sửa CI thì build lại toàn bộ
+            if grep -qE '^\.github/workflows/' <<< "$CHANGED"; then ALL=true; fi
+          else
+            # Push lên main / chạy tay: build toàn bộ những gì đang tồn tại
+            ALL=true
+          fi
+          echo "Changed files:"; echo "${CHANGED:-<all>}"
+
+          changed() { [ "$ALL" = true ] || grep -qE "$1" <<< "$CHANGED"; }
+
+          # Backend: mỗi thư mục backend/<service>/pom.xml là một service
+          services=()
+          for pom in backend/*/pom.xml; do
+            [ -e "$pom" ] || continue
+            svc=$(basename "$(dirname "$pom")")
+            if changed "^backend/(${svc}|common-lib)/|^backend/pom\.xml$"; then
+              services+=("$svc")
+            fi
+          done
+          if [ ${#services[@]} -eq 0 ]; then
+            backend_json='[]'
+          else
+            backend_json=$(printf '%s\n' "${services[@]}" | jq -R . | jq -cs .)
+          fi
+          echo "backend_services=$backend_json" >> "$GITHUB_OUTPUT"
+
+          ai=false
+          if { [ -f ai-service/pyproject.toml ] || [ -f ai-service/requirements.txt ]; } && changed '^ai-service/'; then ai=true; fi
+          echo "ai=$ai" >> "$GITHUB_OUTPUT"
+
+          ai_eval=false
+          if [ "$ai" = true ] && [ -f ai-service/eval/run_eval.py ]; then ai_eval=true; fi
+          echo "ai_eval=$ai_eval" >> "$GITHUB_OUTPUT"
+
+          frontend=false
+          if [ -f frontend/package.json ] && changed '^frontend/'; then frontend=true; fi
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+
+          compose=false
+          if [ -f docker-compose.yml ] && changed '^docker-compose\.yml$|^\.env\.example$|^backend/|^ai-service/|^frontend/'; then compose=true; fi
+          echo "compose=$compose" >> "$GITHUB_OUTPUT"
+
+          echo "backend=$backend_json ai=$ai ai_eval=$ai_eval frontend=$frontend compose=$compose"
+
+  # ---------------------------------------------------------------------------
+  # 3. Backend: Spring Boot services (Maven)
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend (${{ matrix.service }})
+    needs: [conflict-check, changes]
+    if: needs.changes.outputs.backend_services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.backend_services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+          cache-dependency-path: backend/**/pom.xml
+
+      - name: Cài common-lib vào local repo
+        if: matrix.service != 'common-lib' && hashFiles('backend/common-lib/pom.xml') != ''
+        working-directory: backend/common-lib
+        run: |
+          if [ -x ./mvnw ]; then MVN=./mvnw; else MVN=mvn; fi
+          $MVN -B -ntp install -DskipTests
+
+      - name: Build và test
+        working-directory: backend/${{ matrix.service }}
+        run: |
+          if [ -x ./mvnw ]; then MVN=./mvnw; else MVN=mvn; fi
+          $MVN -B -ntp verify
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-${{ matrix.service }}
+          path: backend/${{ matrix.service }}/target/surefire-reports/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 4. AI service: FastAPI (lint + unit test)
+  # ---------------------------------------------------------------------------
+  ai-service:
+    name: AI service
+    needs: [conflict-check, changes]
+    if: needs.changes.outputs.ai == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            ai-service/requirements*.txt
+            ai-service/pyproject.toml
+
+      - name: Cài dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e .; fi
+          pip install ruff pytest
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Unit test (pytest)
+        run: |
+          # Exit code 5 = chưa có test nào; không fail ở giai đoạn đầu
+          pytest -q --ignore=eval || [ $? -eq 5 ]
+
+  # ---------------------------------------------------------------------------
+  # 5. AI evaluation: chạy bộ đánh giá và so với ngưỡng (eval/thresholds.yaml)
+  # ---------------------------------------------------------------------------
+  ai-eval:
+    name: AI evaluation
+    needs: [ai-service, changes]
+    if: needs.changes.outputs.ai_eval == 'true'
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.12.4
+        ports:
+          - 6333:6333
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      QDRANT_URL: http://localhost:6333
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - name: Kiểm tra secret
+        id: secret
+        working-directory: .
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "::warning::Chưa cấu hình secret OPENAI_API_KEY (hoặc PR từ fork), bỏ qua AI evaluation."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secret.outputs.ok == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.secret.outputs.ok == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            ai-service/requirements*.txt
+            ai-service/pyproject.toml
+
+      - name: Cài dependencies
+        if: steps.secret.outputs.ok == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e .; fi
+
+      - name: Chạy evaluation và kiểm tra ngưỡng
+        if: steps.secret.outputs.ok == 'true'
+        run: python -m eval.run_eval --dataset eval/data/v1 --report eval/report.md --check-thresholds
+
+      - name: Đăng report lên job summary
+        if: always() && steps.secret.outputs.ok == 'true'
+        run: |
+          if [ -f eval/report.md ]; then cat eval/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload report
+        if: always() && steps.secret.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-eval-report
+          path: ai-service/eval/report.md
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 6. Frontend: React (lint + test + build)
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend
+    needs: [conflict-check, changes]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm run test --if-present
+      - run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # 7. Validate docker-compose
+  # ---------------------------------------------------------------------------
+  compose-validate:
+    name: Docker Compose validate
+    needs: [conflict-check, changes]
+    if: needs.changes.outputs.compose == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        run: |
+          if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi
+          docker compose -f docker-compose.yml config -q
+
+  # ---------------------------------------------------------------------------
+  # 8. Tổng hợp: đặt job này làm Required status check cho nhánh main
+  # ---------------------------------------------------------------------------
+  ci-success:
+    name: CI success
+    if: always()
+    needs: [conflict-check, changes, backend, ai-service, ai-eval, frontend, compose-validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kiểm tra kết quả các job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$RESULTS" | jq -e 'to_entries | any(.value.result == "failure" or .value.result == "cancelled")' > /dev/null; then
+            echo "::error::Có job thất bại hoặc bị hủy."
+            exit 1
+          fi
+          echo "Tất cả job đều pass hoặc được skip hợp lệ."
