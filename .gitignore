@@ -3,10 +3,13 @@
 .env.*
 !.env.example
 
-# Java / Maven
+# Java / Maven 
+**/target/
 target/
 *.class
 *.log
+*.jar
+*.war
 .mvn/wrapper/maven-wrapper.jar
 
 # Python
