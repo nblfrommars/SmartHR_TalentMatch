@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/user_db
+    username: smarthr
+    password: smarthr123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  liquibase:
+    enabled: false # bật lại khi có db/changelog/db.changelog-master.yaml
+
+  rabbitmq:
+    host: localhost
+    port: 5673
+    username: smarthr
+    password: smarthr123
+
+app:
+  jwt:
+    secret: dev-only-secret-change-me-at-least-32-bytes-long-0123456789
+    access-token-expiration-ms: 3600000

@@ -156,6 +156,32 @@ jobs:
       fail-fast: false
       matrix:
         service: ${{ fromJSON(needs.changes.outputs.backend_services) }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: user_db
+          POSTGRES_USER: smarthr
+          POSTGRES_PASSWORD: smarthr123
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U smarthr -d user_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3.13
+        env:
+          RABBITMQ_DEFAULT_USER: smarthr
+          RABBITMQ_DEFAULT_PASS: smarthr123
+        ports:
+          - 5673:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -166,18 +192,11 @@ jobs:
           cache: maven
           cache-dependency-path: backend/**/pom.xml
 
-      - name: Cài common-lib vào local repo
-        if: matrix.service != 'common-lib' && hashFiles('backend/common-lib/pom.xml') != ''
-        working-directory: backend/common-lib
-        run: |
-          if [ -x ./mvnw ]; then MVN=./mvnw; else MVN=mvn; fi
-          $MVN -B -ntp install -DskipTests
-
       - name: Build và test
-        working-directory: backend/${{ matrix.service }}
+        working-directory: backend # chạy từ backend
         run: |
           if [ -x ./mvnw ]; then MVN=./mvnw; else MVN=mvn; fi
-          $MVN -B -ntp verify
+          $MVN -B -ntp -pl ${{ matrix.service }} -am verify  # SỬA: -pl chọn service, -am tự build kèm root pom và common-lib
 
       - name: Upload test reports
         if: failure()
@@ -341,7 +360,16 @@ jobs:
   ci-success:
     name: CI success
     if: always()
-    needs: [conflict-check, changes, backend, ai-service, ai-eval, frontend, compose-validate]
+    needs:
+      [
+        conflict-check,
+        changes,
+        backend,
+        ai-service,
+        ai-eval,
+        frontend,
+        compose-validate,
+      ]
     runs-on: ubuntu-latest
     steps:
       - name: Kiểm tra kết quả các job

@@ -1,0 +1,10 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: user-cv
+  profiles:
+    default: local # chỉ dùng khi KHÔNG set profile nào khác
+  jpa:
+    open-in-view: false
