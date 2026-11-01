@@ -108,7 +108,7 @@ SmartHR_TalentMatch/
 │   ├── application-service/
 │   ├── notification-service/
 │   └── common-lib/               # DTO event, JWT util, exception handler dùng chung
-├── ai-service/
+├── ai-matching/
 │   ├── app/
 │   │   ├── api/                  # FastAPI routers
 │   │   ├── ingestion/            # Kafka consumers, embedding, upsert Qdrant
@@ -141,7 +141,7 @@ flowchart LR
     GW --> CAND[candidate-service]
     GW --> APP[application-service]
     GW --> NOTI[notification-service]
-    GW --> AI[ai-service<br/>FastAPI]
+    GW --> AI[ai-matching<br/>FastAPI]
 
     AUTH --- PGA[(Postgres auth_db)]
     JOB --- PGJ[(Postgres job_db)]
@@ -183,7 +183,7 @@ flowchart LR
 | **candidate-service** | Quản lý hồ sơ và CV (form + PDF), cờ privacy | `candidates`, `cvs`, `cv_skills`, `cv_experiences`, `outbox` | `POST /cvs` (form), `POST /cvs/upload` (multipart PDF), `PUT /cvs/{id}`, `GET /cvs/{id}`, `PATCH /cvs/{id}/visibility` |
 | **application-service** | Apply job, state machine trạng thái đơn, danh sách ứng viên theo job | `applications`, `application_history`, `job_snapshot` (read-model), `outbox` | `POST /applications`, `GET /applications/me`, `GET /jobs/{id}/applications` (HR), `PATCH /applications/{id}/status` |
 | **notification-service** | Lưu và đẩy thông báo realtime | `notifications` | `GET /notifications`, `PATCH /notifications/{id}/read`, WS `/ws` → `/user/queue/notifications` |
-| **ai-service** | Parse CV, embedding, đồng bộ Qdrant, hybrid search, giải thích, đánh giá | Qdrant `jobs`, `candidates`, Redis cache | `POST /ai/cv/parse`, `GET /ai/recommendations/jobs?cvId=`, `GET /ai/search/candidates?jobId=`, `POST /ai/feedback` |
+| **ai-matching** | Parse CV, embedding, đồng bộ Qdrant, hybrid search, giải thích, đánh giá | Qdrant `jobs`, `candidates`, Redis cache | `POST /ai/cv/parse`, `GET /ai/recommendations/jobs?cvId=`, `GET /ai/search/candidates?jobId=`, `POST /ai/feedback` |
 
 ### 3.3 Luồng Authentication (băm mật khẩu + JWT)
 
@@ -244,7 +244,7 @@ sequenceDiagram
     participant JS as job-service
     participant JDB as job_db
     participant K as Kafka
-    participant AI as ai-service
+    participant AI as ai-matching
     participant OAI as OpenAI
     participant QD as Qdrant
 
@@ -311,7 +311,7 @@ flowchart TD
     B -- Điền form --> F[Form có cấu trúc:<br/>thông tin, skills, kinh nghiệm,<br/>học vấn, mong muốn]
     B -- Upload PDF --> C[POST /cvs/upload<br/>kiểm tra MIME, magic bytes, ≤ 5MB]
     C --> D[candidate-service lưu file vào MinIO<br/>cv-files/userId/uuid.pdf]
-    D --> E[Gọi ai-service POST /ai/cv/parse]
+    D --> E[Gọi ai-matching POST /ai/cv/parse]
     E --> E1[pdfplumber trích text<br/>quá ít text thì chạy OCR Tesseract vie+eng]
     E1 --> E2[gpt-4o-mini Structured Outputs<br/>→ JSON theo CvSchema]
     E2 --> E3[Chuẩn hóa skill, tính tổng số năm KN]
@@ -320,7 +320,7 @@ flowchart TD
     F2 --> G
     G --> H[candidate-service: INSERT/UPDATE cv<br/>+ outbox cv.saved trong cùng transaction]
     H --> I[Kafka cv.saved]
-    I --> J[ai-service: dựng CV document<br/>dense + sparse embedding]
+    I --> J[ai-matching: dựng CV document<br/>dense + sparse embedding]
     J --> K[(Qdrant collection candidates)]
     J --> L[Tính trước recommendation<br/>cache Redis rec:cvId TTL 10 phút]
     L --> M[FE nhận gợi ý qua<br/>GET /ai/recommendations/jobs]
@@ -436,7 +436,7 @@ final = 0.40·s_hybrid + 0.30·s_skill + 0.10·s_level + 0.10·s_exp + 0.05·s_s
 - HR có thể đánh dấu một số skill là `must_have`. Thiếu bất kỳ skill `must_have` nào thì **loại**.
 - `final < τ` (khởi tạo `τ = 0.35`, tinh chỉnh qua eval): không hiển thị. Thà ít gợi ý mà chính xác.
 
-Trọng số `w` để trong config (`ai-service/app/retrieval/weights.yaml`) và được **tune bằng bộ đánh giá** (Phase 8), không hard-code.
+Trọng số `w` để trong config (`ai-matching/app/retrieval/weights.yaml`) và được **tune bằng bộ đánh giá** (Phase 8), không hard-code.
 
 #### Bước 6: Đa dạng hóa
 
@@ -530,16 +530,16 @@ stateDiagram-v2
 ```
 
 - `job_snapshot` trong application-service là **read-model** cập nhật từ `job.*` events, nên khi apply không phải gọi đồng bộ sang job-service.
-- `matchScore` lúc apply được gọi sang ai-service và lưu lại, để HR **sắp xếp ứng viên theo độ phù hợp**.
+- `matchScore` lúc apply được gọi sang ai-matching và lưu lại, để HR **sắp xếp ứng viên theo độ phù hợp**.
 - Khi WebSocket có nhiều instance notification-service: dùng Redis Pub/Sub hoặc STOMP broker relay (RabbitMQ) để fan-out.
 
 ### 3.9 Kafka topics và event contract
 
 | Topic | Producer | Consumer | Key | Payload chính |
 |-------|----------|----------|-----|---------------|
-| `job.events` | job-service | ai-service, application-service | `jobId` | `type` ∈ {created, updated, closed, expired, deleted}, snapshot job |
-| `cv.events` | candidate-service | ai-service | `cvId` | `type` ∈ {saved, deleted, visibility_changed}, snapshot CV (không PII) |
-| `application.events` | application-service | notification-service, ai-service (feedback) | `applicationId` | `type` ∈ {created, status_changed}, ids, status |
+| `job.events` | job-service | ai-matching, application-service | `jobId` | `type` ∈ {created, updated, closed, expired, deleted}, snapshot job |
+| `cv.events` | candidate-service | ai-matching | `cvId` | `type` ∈ {saved, deleted, visibility_changed}, snapshot CV (không PII) |
+| `application.events` | application-service | notification-service, ai-matching (feedback) | `applicationId` | `type` ∈ {created, status_changed}, ids, status |
 | `user.events` | auth-service | notification-service, candidate-service | `userId` | {registered, hr_approved, locked} |
 | `*.DLQ` | Spring Kafka / aiokafka | Admin/ops | – | Event lỗi sau 3 lần retry |
 
@@ -645,7 +645,7 @@ client.create_collection(
 # years_experience, skills, desired_salary_min, updated_ts
 ```
 
-**Skill normalization** (`ai-service/app/skills/`): file `skills_alias.yaml` (ví dụ `reactjs, react.js → react`; `k8s → kubernetes`; `js → javascript`; `springboot, spring-boot → spring boot`), lowercase, bỏ dấu câu. Áp dụng **giống hệt** cho cả job và CV. Đây là điều kiện để sparse search và `s_skill` chạy đúng. Phase sau có thể map sang chuẩn ESCO/O*NET.
+**Skill normalization** (`ai-matching/app/skills/`): file `skills_alias.yaml` (ví dụ `reactjs, react.js → react`; `k8s → kubernetes`; `js → javascript`; `springboot, spring-boot → spring boot`), lowercase, bỏ dấu câu. Áp dụng **giống hệt** cho cả job và CV. Đây là điều kiện để sparse search và `s_skill` chạy đúng. Phase sau có thể map sang chuẩn ESCO/O*NET.
 
 **Tiếng Việt với BM25:** `Qdrant/bm25` tokenize theo khoảng trắng và stemmer tiếng Anh. Tiếng Việt cần (1) chuẩn hóa Unicode NFC, (2) tách từ ghép bằng `underthesea` / `pyvi` ("phát triển" → `phát_triển`) trước khi đưa vào BM25, (3) dùng **cùng một tokenizer** khi index và khi query.
 
@@ -665,7 +665,7 @@ flowchart LR
     CI -- Có --> P[Pass]
 ```
 
-#### 3.11.1 Golden dataset (`ai-service/eval/data/`)
+#### 3.11.1 Golden dataset (`ai-matching/eval/data/`)
 
 - **`jobs.jsonl`**: khoảng 200 job đa ngành (IT, Marketing, Kế toán, Sales…). Một phần **cố ý quá hạn**, `CLOSED`, hoặc "na ná nhưng lệch skill" (ví dụ "Java Developer" và "JavaScript Developer").
 - **`cvs.jsonl`**: khoảng 50–100 CV (tự tạo hoặc ẩn danh hóa), kèm **10–20 file PDF** có nhãn field để test parsing.
@@ -747,12 +747,12 @@ Test sử dụng **clock giả lập** (`now` cố định) để kết quả t�
 #### 3.11.8 Cách chạy
 
 ```bash
-cd ai-service
+cd ai-matching
 python -m eval.run_eval --dataset eval/data/v1 --ablation --report eval/report.md
 python -m eval.run_eval --dataset eval/data/v1 --check-thresholds   # exit 1 nếu dưới ngưỡng (dùng trong CI)
 ```
 
-Ngưỡng nằm ở `eval/thresholds.yaml`. Trong CI, Qdrant chạy bằng service container. Embedding của dataset được **cache sẵn** (`eval/data/v1/embeddings.npz`) để không tốn tiền OpenAI mỗi lần chạy; chỉ tầng 1 và tầng 4 mới thực sự gọi OpenAI, và chỉ chạy khi `ai-service/**` thay đổi.
+Ngưỡng nằm ở `eval/thresholds.yaml`. Trong CI, Qdrant chạy bằng service container. Embedding của dataset được **cache sẵn** (`eval/data/v1/embeddings.npz`) để không tốn tiền OpenAI mỗi lần chạy; chỉ tầng 1 và tầng 4 mới thực sự gọi OpenAI, và chỉ chạy khi `ai-matching/**` thay đổi.
 
 ### 3.12 Bảo mật và vận hành
 
@@ -761,8 +761,8 @@ Ngưỡng nằm ở `eval/thresholds.yaml`. Trong CI, Qdrant chạy bằng servi
 - **Upload an toàn:** kiểm tra magic bytes `%PDF`, giới hạn 5MB và 10 trang, quét ClamAV (Post-MVP), MinIO bucket private và chỉ cấp **presigned URL** có hạn 5 phút khi HR xem CV.
 - **PII:** không gửi email/SĐT sang OpenAI và Qdrant; mã hóa cột nhạy cảm; user có quyền xóa tài khoản ("right to be forgotten"), việc xóa lan sang Qdrant qua `cv.deleted`.
 - **Secrets:** `.env` không commit; trong CI dùng GitHub Secrets.
-- **Observability:** correlation-id đi từ gateway qua Kafka header tới ai-service; dashboard Grafana cho latency, error rate, consumer lag, chi phí token.
-- **Resilience:** Resilience4j (circuit breaker, timeout) cho các lời gọi sang ai-service; khi ai-service hoặc OpenAI lỗi, FE fallback sang tìm kiếm SQL thường của job-service.
+- **Observability:** correlation-id đi từ gateway qua Kafka header tới ai-matching; dashboard Grafana cho latency, error rate, consumer lag, chi phí token.
+- **Resilience:** Resilience4j (circuit breaker, timeout) cho các lời gọi sang ai-matching; khi ai-matching hoặc OpenAI lỗi, FE fallback sang tìm kiếm SQL thường của job-service.
 
 ---
 
@@ -890,10 +890,10 @@ File: [`.github/workflows/ci.yml`](.github/workflows/ci.yml), chạy mỗi khi *
 | Job | Chức năng |
 |-----|-----------|
 | `conflict-check` | Quét conflict marker (`<<<<<<<`, `=======`, `>>>>>>>`) còn sót trong code; với PR thì thử merge vào `main` để phát hiện conflict |
-| `changes` | Xác định phần nào thay đổi (backend service nào, ai-service, frontend) để chỉ build phần liên quan |
+| `changes` | Xác định phần nào thay đổi (backend service nào, ai-matching, frontend) để chỉ build phần liên quan |
 | `backend` | Matrix theo từng Spring Boot service: `mvn verify` (compile + test) |
-| `ai-service` | `ruff` lint + `pytest` |
-| `ai-eval` | Chạy `eval.run_eval --check-thresholds`, chỉ chạy khi `ai-service/**` thay đổi và có secret `OPENAI_API_KEY` |
+| `ai-matching` | `ruff` lint + `pytest` |
+| `ai-eval` | Chạy `eval.run_eval --check-thresholds`, chỉ chạy khi `ai-matching/**` thay đổi và có secret `OPENAI_API_KEY` |
 | `frontend` | `npm ci` + lint + build |
 | `compose-validate` | `docker compose config` để kiểm tra file compose hợp lệ |
 | `ci-success` | Job tổng hợp, đặt làm **required status check** trong branch protection |
