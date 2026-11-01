@@ -14,8 +14,8 @@ import lombok.Setter;
 @Builder
 public class JobSkillReq {
 
-    @NotBlank(message = "Tên kỹ năng không được để trống")
-    private String skillName;
+    @NotBlank
+    private String skill;
 
     private Boolean mustHave;
 

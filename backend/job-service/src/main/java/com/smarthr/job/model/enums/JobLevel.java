@@ -3,9 +3,9 @@ package com.smarthr.job.model.enums;
 public enum JobLevel {
     INTERN,
     FRESHER,
-    JUNIOR, 
+    JUNIOR,
     MIDDLE,
-    SENIOR, 
-    LEAD, 
+    SENIOR,
+    LEAD,
     MANAGER
 }

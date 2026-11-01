@@ -1,13 +1,9 @@
 package com.smarthr.job.model.entity;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.OffsetDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
-
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobStatus;
@@ -17,7 +13,6 @@ import com.smarthr.job.model.enums.WorkMode;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -25,54 +20,54 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Entity
+@Entity 
 @Table(name = "jobs")
-@EntityListeners(AuditingEntityListener.class)
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@NoArgsConstructor 
+@AllArgsConstructor 
+@Getter 
+@Setter 
+@Builder    
 public class Job {
-
-    @Id
+    @Id 
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
+    @Column(name = "id", nullable = false)
+    private UUID id;   
+    
     @Column(name = "company_id", nullable = false)
     private UUID companyId;
 
-    @Column(name = "hr_id", nullable = false)
-    private UUID hrId;
+    @Column(name = "created_by", nullable = false)
+    private UUID createdBy;
 
-    @Column(nullable = false)
+    @Column(name = "title", nullable = false, length = 255)
     private String title;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
+    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
+    @Column(name = "level", nullable = false)
     private JobLevel level;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "job_type", nullable = false, length = 50)
+    @Column(name = "job_type", nullable = false)
     private JobType jobType;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "work_mode", nullable = false, length = 50)
+    @Column(name = "work_mode", nullable = false)
     private WorkMode workMode;
 
-    @Column(nullable = false)
+    @Column(name = "location", nullable = false, length = 255) 
     private String location;
 
-    @Column(nullable = false, length = 100)
+    @Column(name = "industry", nullable = false, length = 100)
     private String industry;
 
     @Column(name = "salary_min")
@@ -81,46 +76,33 @@ public class Job {
     @Column(name = "salary_max")
     private Long salaryMax;
 
-    @Builder.Default
-    @Column(name = "salary_negotiable", nullable = false)
-    private Boolean salaryNegotiable = false;
+    @Column(name = "min_years_exp")
+    private Integer minYearsExp;
 
-    @Builder.Default
-    @Column(name = "yoe", nullable = false)
-    private Integer yoe = 0;
+    @Column(name = "deadline", nullable = false)
+    private OffsetDateTime deadline;
 
-    @Column(nullable = false)
-    private Instant deadline;
-
-    @Builder.Default
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
-    private JobStatus status = JobStatus.OPEN;
-
-    @CreatedDate
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @LastModifiedDate
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
     @Builder.Default
+    @Column(name = "status", nullable = false)
+    private JobStatus status = JobStatus.DRAFT;
+
+    @Version 
+    @Builder.Default
+    @Column(name = "version", nullable = false)
+    private Integer version = 0;
+
     @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<JobSkill> skills = new ArrayList<>();
+    @Builder.Default
+    private Set<JobSkill> jobSkills = new HashSet<>();
 
     public void addSkill(JobSkill skill) {
-        skills.add(skill);
+        jobSkills.add(skill);
         skill.setJob(this);
     }
 
     public void removeSkill(JobSkill skill) {
-        skills.remove(skill);
+        jobSkills.remove(skill);
         skill.setJob(null);
-    }
-
-    public void clearSkills() {
-        skills.forEach(skill -> skill.setJob(null));
-        skills.clear();
     }
 }

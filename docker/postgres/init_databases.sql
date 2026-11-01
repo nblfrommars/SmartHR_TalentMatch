@@ -1,2 +1,2 @@
-create table job_db;
+create database job_db;
 

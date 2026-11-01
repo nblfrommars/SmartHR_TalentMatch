@@ -1,30 +1,28 @@
 package com.smarthr.job.service.impl;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smarthr.job.dto.req.CreateJobReq;
-import com.smarthr.job.dto.req.JobSkillReq;
 import com.smarthr.job.dto.req.UpdateJobReq;
 import com.smarthr.job.dto.res.JobRes;
-import com.smarthr.job.dto.res.JobSkillRes;
+import com.smarthr.job.mapper.JobMapper;
 import com.smarthr.job.model.entity.Job;
-import com.smarthr.job.model.entity.JobSkill;
+import com.smarthr.job.model.entity.Outbox;
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobStatus;
-import com.smarthr.job.model.enums.JobType;
-import com.smarthr.job.model.enums.WorkMode;
 import com.smarthr.job.repo.JobRepo;
+import com.smarthr.job.repo.OutboxRepo;
 import com.smarthr.job.service.JobService;
 
-import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -32,210 +30,94 @@ import lombok.RequiredArgsConstructor;
 public class JobServiceImpl implements JobService {
 
     private final JobRepo jobRepo;
+    private final OutboxRepo outboxRepo;
+    private final JobMapper jobMapper;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
-    public JobRes createJob(UUID hrId, CreateJobReq Req) {
-        validateSalary(Req.getSalaryMin(), Req.getSalaryMax(), Req.getSalaryNegotiable());
-
-        Job job = Job.builder()
-                .companyId(Req.getCompanyId())
-                .hrId(hrId)
-                .title(Req.getTitle())
-                .description(Req.getDescription())
-                .level(Req.getLevel())
-                .jobType(Req.getJobType())
-                .workMode(Req.getWorkMode())
-                .location(Req.getLocation())
-                .industry(Req.getIndustry())
-                .salaryMin(Req.getSalaryMin())
-                .salaryMax(Req.getSalaryMax())
-                .salaryNegotiable(Boolean.TRUE.equals(Req.getSalaryNegotiable()))
-                .yoe(Req.getYoe() != null ? Req.getYoe() : 0)
-                .deadline(Req.getDeadline())
-                .status(JobStatus.OPEN)
-                .build();
-
-        if (Req.getSkills() != null) {
-            for (JobSkillReq skillReq : Req.getSkills()) {
-                JobSkill skill = JobSkill.builder()
-                        .skillName(skillReq.getSkillName().toLowerCase().trim())
-                        .mustHave(Boolean.TRUE.equals(skillReq.getMustHave()))
-                        .required(skillReq.getRequired() == null || Boolean.TRUE.equals(skillReq.getRequired()))
-                        .build();
-                job.addSkill(skill);
-            }
-        }
+    public JobRes createJob(CreateJobReq req, UUID companyId, UUID createdBy) {
+        Job job = jobMapper.toEntity(req);
+        job.setCompanyId(companyId);
+        job.setCreatedBy(createdBy);
+        job.setStatus(JobStatus.OPEN);
 
         Job savedJob = jobRepo.save(job);
-        return mapToRes(savedJob);
+        JobRes res = jobMapper.toResponse(savedJob);
+
+        saveOutboxEvent("job.created", savedJob.getId(), res);
+
+        return res;
+    }
+
+    @Override
+    @Transactional
+    public JobRes updateJob(UUID id, UpdateJobReq req, UUID companyId) {
+        Job job = findJobByIdAndValidateOwnership(id, companyId);
+
+        jobMapper.updateEntity(job, req);
+        Job updatedJob = jobRepo.save(job);
+        JobRes res = jobMapper.toResponse(updatedJob);
+
+        saveOutboxEvent("job.updated", updatedJob.getId(), res);
+
+        return res;
     }
 
     @Override
     @Transactional(readOnly = true)
     public JobRes getJobById(UUID id) {
         Job job = jobRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy job với ID: " + id));
-        return mapToRes(job);
-    }
-
-    @Override
-    @Transactional
-    public JobRes updateJob(UUID id, UUID hrId, UUID companyId, UpdateJobReq Req) {
-        Job job = jobRepo.findByIdAndCompanyId(id, companyId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy job hoặc bạn không có quyền chỉnh sửa job này"));
-
-        validateSalary(Req.getSalaryMin(), Req.getSalaryMax(), Req.getSalaryNegotiable());
-
-        job.setTitle(Req.getTitle());
-        job.setDescription(Req.getDescription());
-        job.setLevel(Req.getLevel());
-        job.setJobType(Req.getJobType());
-        job.setWorkMode(Req.getWorkMode());
-        job.setLocation(Req.getLocation());
-        job.setIndustry(Req.getIndustry());
-        job.setSalaryMin(Req.getSalaryMin());
-        job.setSalaryMax(Req.getSalaryMax());
-        job.setSalaryNegotiable(Boolean.TRUE.equals(Req.getSalaryNegotiable()));
-        job.setYoe(Req.getYoe() != null ? Req.getYoe() : 0);
-        job.setDeadline(Req.getDeadline());
-        job.setStatus(Req.getStatus());
-
-        job.clearSkills();
-
-        if (Req.getSkills() != null) {
-            for (JobSkillReq skillReq : Req.getSkills()) {
-                JobSkill skill = JobSkill.builder()
-                        .skillName(skillReq.getSkillName().toLowerCase().trim())
-                        .mustHave(Boolean.TRUE.equals(skillReq.getMustHave()))
-                        .required(skillReq.getRequired() == null || Boolean.TRUE.equals(skillReq.getRequired()))
-                        .build();
-                job.addSkill(skill);
-            }
-        }
-
-        Job updatedJob = jobRepo.save(job);
-        return mapToRes(updatedJob);
-    }
-
-    @Override
-    @Transactional
-    public void closeJob(UUID id, UUID hrId, UUID companyId) {
-        Job job = jobRepo.findByIdAndCompanyId(id, companyId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy job hoặc bạn không có quyền đóng job này"));
-        job.setStatus(JobStatus.CLOSED);
-        jobRepo.save(job);
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        return jobMapper.toResponse(job);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<JobRes> searchJobs(
-            String search,
-            String industry,
-            String location,
-            JobLevel level,
-            JobType jobType,
-            WorkMode workMode,
-            Long salaryMin,
-            Long salaryMax,
-            JobStatus status,
-            Pageable pageable
-    ) {
-        Specification<Job> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-
-            if (search != null && !search.isBlank()) {
-                String searchPattern = "%" + search.toLowerCase().trim() + "%";
-                Predicate titleMatch = cb.like(cb.lower(root.get("title")), searchPattern);
-                Predicate descMatch = cb.like(cb.lower(root.get("description")), searchPattern);
-                predicates.add(cb.or(titleMatch, descMatch));
-            }
-
-            if (industry != null && !industry.isBlank()) {
-                predicates.add(cb.equal(cb.lower(root.get("industry")), industry.toLowerCase().trim()));
-            }
-
-            if (location != null && !location.isBlank()) {
-                predicates.add(cb.like(cb.lower(root.get("location")), "%" + location.toLowerCase().trim() + "%"));
-            }
-
-            if (level != null) {
-                predicates.add(cb.equal(root.get("level"), level));
-            }
-
-            if (jobType != null) {
-                predicates.add(cb.equal(root.get("jobType"), jobType));
-            }
-
-            if (workMode != null) {
-                predicates.add(cb.equal(root.get("workMode"), workMode));
-            }
-
-            if (status != null) {
-                predicates.add(cb.equal(root.get("status"), status));
-            } else {
-                predicates.add(cb.equal(root.get("status"), JobStatus.OPEN));
-            }
-
-            if (salaryMin != null) {
-                predicates.add(cb.or(
-                        cb.greaterThanOrEqualTo(root.get("salaryMax"), salaryMin),
-                        cb.equal(root.get("salaryNegotiable"), true)
-                ));
-            }
-
-            if (salaryMax != null) {
-                predicates.add(cb.or(
-                        cb.lessThanOrEqualTo(root.get("salaryMin"), salaryMax),
-                        cb.equal(root.get("salaryNegotiable"), true)
-                ));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-
-        return jobRepo.findAll(spec, pageable).map(this::mapToRes);
+    public Page<JobRes> getJobsByCompany(UUID companyId, Pageable pageable) {
+        return jobRepo.findByCompanyId(companyId, pageable)
+                .map(jobMapper::toResponse);
     }
 
-    private void validateSalary(Long min, Long max, Boolean negotiable) {
-        if (Boolean.TRUE.equals(negotiable)) {
-            return;
-        }
-        if (min != null && max != null && min > max) {
-            throw new IllegalArgumentException("Mức lương tối thiểu không được lớn hơn mức lương tối đa");
-        }
+    @Override
+    @Transactional(readOnly = true)
+    public Page<JobRes> searchJobs(String industry, String location, JobStatus status, Long salaryMin, Long salaryMax, JobLevel level, String keyword, Pageable pageable) {
+        return jobRepo.search(industry, location, status, salaryMin, salaryMax, level, keyword, pageable)
+                .map(jobMapper::toResponse);
     }
 
-    private JobRes mapToRes(Job job) {
-        List<JobSkillRes> skillRess = job.getSkills().stream()
-                .map(s -> JobSkillRes.builder()
-                        .id(s.getId())
-                        .skillName(s.getSkillName())
-                        .mustHave(s.getMustHave())
-                        .required(s.getRequired())
-                        .build())
-                .toList();
+    @Override
+    @Transactional
+    public void closeJob(UUID id, UUID companyId) {
+        Job job = findJobByIdAndValidateOwnership(id, companyId);
+        job.setStatus(JobStatus.CLOSED);
+        Job closedJob = jobRepo.save(job);
 
-        return JobRes.builder()
-                .id(job.getId())
-                .companyId(job.getCompanyId())
-                .hrId(job.getHrId())
-                .title(job.getTitle())
-                .description(job.getDescription())
-                .level(job.getLevel())
-                .jobType(job.getJobType())
-                .workMode(job.getWorkMode())
-                .location(job.getLocation())
-                .industry(job.getIndustry())
-                .salaryMin(job.getSalaryMin())
-                .salaryMax(job.getSalaryMax())
-                .salaryNegotiable(job.getSalaryNegotiable())
-                .yoe(job.getYoe())
-                .deadline(job.getDeadline())
-                .status(job.getStatus())
-                .createdAt(job.getCreatedAt())
-                .updatedAt(job.getUpdatedAt())
-                .skills(skillRess)
-                .build();
+        JobRes res = jobMapper.toResponse(closedJob);
+        saveOutboxEvent("job.closed", closedJob.getId(), res);
+    }
+
+    private Job findJobByIdAndValidateOwnership(UUID id, UUID companyId) {
+        Job job = jobRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+
+        if (!job.getCompanyId().equals(companyId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to modify this job");
+        }
+        return job;
+    }
+
+    private void saveOutboxEvent(String eventType, UUID aggregateId, Object data) {
+        try {
+            String payload = objectMapper.writeValueAsString(data);
+            Outbox outbox = Outbox.builder()
+                    .eventType(eventType)
+                    .aggregateId(aggregateId)
+                    .payload(payload)
+                    .build();
+            outboxRepo.save(outbox);
+        } catch (JsonProcessingException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize event payload");
+        }
     }
 }

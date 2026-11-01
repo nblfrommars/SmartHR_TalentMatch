@@ -1,8 +1,7 @@
 package com.smarthr.job.dto.req;
 
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.UUID;
 
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobType;
@@ -10,10 +9,10 @@ import com.smarthr.job.model.enums.WorkMode;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -27,46 +26,40 @@ import lombok.Setter;
 @Builder
 public class CreateJobReq {
 
-    @NotNull(message = "Company ID không được để trống")
-    private UUID companyId;
-
-    @NotBlank(message = "Tiêu đề công việc không được để trống")
+    @NotBlank
     private String title;
 
-    @NotBlank(message = "Mô tả công việc không được để trống")
+    @NotBlank
     private String description;
 
-    @NotNull(message = "Cấp bậc không được để trống")
+    @NotNull
     private JobLevel level;
 
-    @NotNull(message = "Loại hình làm việc không được để trống")
+    @NotNull
     private JobType jobType;
 
-    @NotNull(message = "Chế độ làm việc không được để trống")
+    @NotNull
     private WorkMode workMode;
 
-    @NotBlank(message = "Địa điểm không được để trống")
+    @NotBlank
     private String location;
 
-    @NotBlank(message = "Ngành nghề không được để trống")
+    @NotBlank
     private String industry;
 
-    @Min(value = 0, message = "Lương tối thiểu phải lớn hơn hoặc bằng 0")
+    @Positive
     private Long salaryMin;
 
-    @Min(value = 0, message = "Lương tối đa phải lớn hơn hoặc bằng 0")
+    @Positive
     private Long salaryMax;
 
-    private Boolean salaryNegotiable;
+    private Integer minYearsExp;
 
-    @Min(value = 0, message = "Số năm kinh nghiệm không được âm")
-    private Integer yoe;
+    @NotNull
+    @Future
+    private OffsetDateTime deadline;
 
-    @NotNull(message = "Hạn nộp hồ sơ không được để trống")
-    @Future(message = "Hạn nộp hồ sơ phải là một thời điểm trong tương lai")
-    private Instant deadline;
-
-    @NotEmpty(message = "Danh sách kỹ năng không được để trống")
+    @NotEmpty
     @Valid
     private List<JobSkillReq> skills;
 }

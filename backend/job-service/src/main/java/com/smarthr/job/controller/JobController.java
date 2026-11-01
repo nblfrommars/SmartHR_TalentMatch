@@ -23,15 +23,13 @@ import com.smarthr.job.dto.req.UpdateJobReq;
 import com.smarthr.job.dto.res.JobRes;
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobStatus;
-import com.smarthr.job.model.enums.JobType;
-import com.smarthr.job.model.enums.WorkMode;
 import com.smarthr.job.service.JobService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("api/v1/jobs")
+@RequestMapping("/api/v1/jobs")
 @RequiredArgsConstructor
 public class JobController {
 
@@ -39,56 +37,56 @@ public class JobController {
 
     @PostMapping
     public ResponseEntity<JobRes> createJob(
-            @RequestHeader("X-User-Id") UUID hrId,
-            @Valid @RequestBody CreateJobReq req
+            @Valid @RequestBody CreateJobReq req,
+            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestHeader("X-User-Id") UUID userId
     ) {
-        JobRes res = jobService.createJob(hrId, req);
+        JobRes res = jobService.createJob(req, companyId, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<JobRes> getJobById(@PathVariable UUID id) {
-        JobRes res = jobService.getJobById(id);
-        return ResponseEntity.ok(res);
+        return ResponseEntity.ok(jobService.getJobById(id));
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<JobRes>> searchJobs(
+            @RequestParam(required = false) String industry,
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false) JobStatus status,
+            @RequestParam(required = false) Long salaryMin,
+            @RequestParam(required = false) Long salaryMax,
+            @RequestParam(required = false) JobLevel level,
+            @RequestParam(required = false) String keyword,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(jobService.searchJobs(industry, location, status, salaryMin, salaryMax, level, keyword, pageable));
+    }
+
+    @GetMapping("/company")
+    public ResponseEntity<Page<JobRes>> getJobsByCompany(
+            @RequestHeader("X-Company-Id") UUID companyId,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(jobService.getJobsByCompany(companyId, pageable));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<JobRes> updateJob(
             @PathVariable UUID id,
-            @RequestHeader("X-User-Id") UUID hrId,
-            @RequestHeader("X-Company-Id") UUID companyId,
-            @Valid @RequestBody UpdateJobReq req
+            @Valid @RequestBody UpdateJobReq req,
+            @RequestHeader("X-Company-Id") UUID companyId
     ) {
-        JobRes res = jobService.updateJob(id, hrId, companyId, req);
-        return ResponseEntity.ok(res);
+        return ResponseEntity.ok(jobService.updateJob(id, req, companyId));
     }
 
     @PatchMapping("/{id}/close")
     public ResponseEntity<Void> closeJob(
             @PathVariable UUID id,
-            @RequestHeader("X-User-Id") UUID hrId,
             @RequestHeader("X-Company-Id") UUID companyId
     ) {
-        jobService.closeJob(id, hrId, companyId);
+        jobService.closeJob(id, companyId);
         return ResponseEntity.noContent().build();
     }
-
-    @GetMapping
-    public ResponseEntity<Page<JobRes>> searchJobs(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String industry,
-            @RequestParam(required = false) String location,
-            @RequestParam(required = false) JobLevel level,
-            @RequestParam(required = false) JobType jobType,
-            @RequestParam(required = false) WorkMode workMode,
-            @RequestParam(required = false) Long salaryMin,
-            @RequestParam(required = false) Long salaryMax,
-            @RequestParam(required = false) JobStatus status,
-            @PageableDefault(size = 10) Pageable pageable
-    ) {
-        Page<JobRes> res = jobService.searchJobs(
-                search, industry, location, level, jobType, workMode, salaryMin, salaryMax, status, pageable
-        );
-        return ResponseEntity.ok(res);
-    }
-}
+} 

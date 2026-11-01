@@ -1,6 +1,6 @@
 package com.smarthr.job.dto.res;
 
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,7 +24,7 @@ public class JobRes {
 
     private UUID id;
     private UUID companyId;
-    private UUID hrId;
+    private UUID createdBy;
     private String title;
     private String description;
     private JobLevel level;
@@ -34,11 +34,9 @@ public class JobRes {
     private String industry;
     private Long salaryMin;
     private Long salaryMax;
-    private Boolean salaryNegotiable;
-    private Integer yoe;
-    private Instant deadline;
+    private Integer minYearsExp;
+    private OffsetDateTime deadline;
     private JobStatus status;
-    private Instant createdAt;
-    private Instant updatedAt;
+    private Integer version;
     private List<JobSkillRes> skills;
 }
