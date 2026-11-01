@@ -37,3 +37,6 @@ coverage/
 # Data
 qdrant_storage/
 minio_data/
+
+# Postman
+postman/
