@@ -1,0 +1,73 @@
+name: smarthr-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smarthr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: smarthr
+      POSTGRES_PASSWORD: smarthr123
+    ports:
+      - "5433:5432"
+    volumes:
+      - smarthr_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smarthr -d user_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: smarthr-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: smarthr
+      RABBITMQ_DEFAULT_PASS: smarthr123
+    ports:
+      - "5673:5672" # AMQP
+      - "15673:15672" # Management UI: http://localhost:15673
+    volumes:
+      - smarthr_rabbit_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: smarthr-minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: smarthr
+  #     MINIO_ROOT_PASSWORD: smarthr123
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - smarthr_minio_data:/data
+  #
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:26.7.0
+  #   container_name: smarthr-keycloak
+  #   command: start-dev
+  #   environment:
+  #     KC_DB: postgres
+  #     KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db   # cần tạo keycloak_db trước
+  #     KC_DB_USERNAME: smarthr
+  #     KC_DB_PASSWORD: smarthr123
+  #     KC_BOOTSTRAP_ADMIN_USERNAME: admin
+  #     KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+  #   ports:
+  #     - "8180:8080"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+volumes:
+  smarthr_pg_data:
+  smarthr_rabbit_data:
+  # smarthr_minio_data:

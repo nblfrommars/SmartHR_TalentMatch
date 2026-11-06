@@ -20,6 +20,7 @@
 
     <modules>
         <module>common-lib</module>
+        <module>user-cv</module>
     </modules>
 
     <properties>
@@ -92,6 +93,7 @@
                 <artifactId>mapstruct</artifactId>
                 <version>${mapstruct.version}</version>
             </dependency>
+            
         </dependencies>
     </dependencyManagement>
 

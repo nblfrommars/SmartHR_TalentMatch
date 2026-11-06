@@ -1,0 +1,41 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/user_db
+    username: smarthr
+    password: smarthr123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  liquibase:
+    enabled: false # bật lại khi có db/changelog/db.changelog-master.yaml
+
+  rabbitmq:
+    host: localhost
+    port: 5673
+    username: smarthr
+    password: smarthr123
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8180/realms/smarthr}
+
+keycloak:
+  admin:
+    base-url: ${KEYCLOAK_BASE_URL:http://localhost:8180}
+    realm: ${KEYCLOAK_REALM:smarthr}
+    client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:smarthr-admin-service}
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:smarthr-admin-secret}
+
+app:
+  jwt:
+    secret: dev-only-secret-change-me-at-least-32-bytes-long-0123456789
+    access-token-expiration-ms: 3600000
