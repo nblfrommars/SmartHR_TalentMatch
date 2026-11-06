@@ -22,9 +22,11 @@ import com.hr.user.cv.entity.Skill;
 import com.hr.user.cv.enums.UserRole;
 import com.hr.user.cv.enums.SkillStatus;
 import com.hr.user.cv.dto.request.CreateUserRequest;
+import com.hr.user.cv.dto.request.RegisterUserRequest;
 import com.hr.user.cv.dto.request.CVSkillRequest;
 import com.hr.user.cv.dto.response.UserResponse;
 import com.hr.user.cv.mapper.UserMapper;
+import com.hr.user.cv.integration.KeycloakAdminClient;
 
 import lombok.RequiredArgsConstructor;
 
@@ -37,6 +39,7 @@ public class UserServiceImpl implements UserService {
     private final HRProfileRepository hrProfileRepository;
     private final SkillRepository skillRepository;
     private final UserMapper userMapper;
+    private final KeycloakAdminClient keycloakAdminClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -51,11 +54,47 @@ public class UserServiceImpl implements UserService {
         return userMapper.toResponse(user);
     }
 
+    @Override
+    @Transactional
+    public UserResponse register(RegisterUserRequest req) {
+        validateRegistration(req);
+        String keycloakRole = req.getRole() == UserRole.HR ? "HR" : "USER";
+        String keycloakUserId;
+        try {
+            keycloakUserId = keycloakAdminClient.createUser(
+                    req.getUserName().trim(), req.getEmail().trim(), req.getFullName(), req.getPassword(), keycloakRole);
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to create user in Keycloak", ex);
+        }
+
+        try {
+            return userMapper.toResponse(createUser(req));
+        } catch (RuntimeException ex) {
+            try {
+                keycloakAdminClient.deleteUser(keycloakUserId);
+            } catch (Exception ignored) {
+                // Keep the original registration error; reconciliation can remove the orphan later.
+            }
+            throw ex;
+        }
+    }
+
+    private void validateRegistration(RegisterUserRequest req) {
+        validate(req);
+        if (req.getEmail() == null || req.getEmail().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required");
+        }
+        if (req.getPassword() == null || req.getPassword().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required");
+        }
+    }
+
     private User createUser(CreateUserRequest req) {
         validate(req);
 
         User user = new User();
         user.setUserName(req.getUserName().trim());
+        user.setEmail(req.getEmail().trim());
         user.setFullName(req.getFullName());
         user.setDob(req.getDob());
         user.setRole(req.getRole());

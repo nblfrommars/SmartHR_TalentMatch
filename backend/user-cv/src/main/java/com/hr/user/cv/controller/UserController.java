@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.hr.user.cv.dto.request.CreateUserRequest;
+import com.hr.user.cv.dto.request.RegisterUserRequest;
 import com.hr.user.cv.dto.response.UserResponse;
 import com.hr.user.cv.mapper.UserMapper;
 import com.hr.user.cv.service.UserService;
@@ -35,5 +36,11 @@ public class UserController {
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
         return userService.save(request);
+    }
+
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserResponse register(@Valid @RequestBody RegisterUserRequest request) {
+        return userService.register(request);
     }
 }

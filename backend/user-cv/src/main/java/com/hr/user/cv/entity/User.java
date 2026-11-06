@@ -13,6 +13,7 @@ import com.hr.user.cv.enums.UserRole;
 @Getter
 @Setter
 @EntityListeners({AuditingEntityListener.class})
+@Table(name = "users")
 public class User{
 
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,6 +23,9 @@ public class User{
 
     @Column(name = "username", unique = true, nullable = false)
     private String userName;
+
+    @Column(name = "email", nullable = false)
+    private String email;
     
     @Column(name = "full_name")
     private String fullName;
