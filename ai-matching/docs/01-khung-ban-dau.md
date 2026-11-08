@@ -30,6 +30,8 @@ ai-matching/
 ├── .python-version           # 3.11: uv dùng đúng phiên bản Python này
 ├── .env.example              # Mẫu biến môi trường, copy thành .env khi chạy local
 ├── README.md                 # Hướng dẫn chạy nhanh
+├── Dockerfile                # Đóng gói service thành image (2 stage)
+├── .dockerignore             # Loại file thừa/bí mật khỏi image
 ├── docs/
 │   └── 01-khung-ban-dau.md   # File này
 ├── app/
@@ -81,6 +83,25 @@ Chứa `3.11`. `uv` đọc file này để tạo `.venv` đúng Python 3.11 (kh�
 
 #### `.env.example`
 Mẫu các biến môi trường. Khi chạy local: `cp .env.example .env` rồi điền giá trị (ví dụ `AI_OPENAI_API_KEY`). File `.env` thật **không commit** vì chứa secret.
+
+#### `Dockerfile`
+Đóng gói ai-matching thành Docker image, gồm 2 stage:
+
+1. **builder** (`python:3.11-slim-bookworm` + binary `uv` 0.13.6, trùng bản đã sinh `uv.lock`):
+   - Chỉ copy `pyproject.toml` và `uv.lock` trước, rồi `uv sync --frozen --no-install-project`. Nhờ vậy Docker cache lại layer dependency: sửa code trong `app/` không làm cài lại thư viện.
+   - `--frozen`: cài đúng theo `uv.lock`, lock lệch với `pyproject.toml` thì báo lỗi thay vì tự cập nhật.
+   - Không có `--extra dev`, nên `pytest`, `httpx`, `ruff` **không** vào image.
+   - Venv đặt ở `/opt/venv`; `UV_PYTHON_DOWNLOADS=never` bắt uv dùng Python có sẵn của image.
+2. **runtime** (cùng base image, không có `uv`):
+   - Chỉ copy `/opt/venv` và thư mục `app/` (gồm cả `skills_alias.yaml`), nên image nhỏ.
+   - Chạy bằng user `appuser` (uid 10001), không phải root.
+   - `HEALTHCHECK` gọi `GET /health` bằng Python (image slim không có `curl`), dùng cho `docker ps` và `depends_on: condition: service_healthy` trong docker-compose sau này.
+   - Khởi động: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+
+Cấu hình truyền vào lúc chạy bằng biến môi trường `AI_*` (`--env-file .env` hoặc `environment:` trong compose). File `.env` không nằm trong image.
+
+#### `.dockerignore`
+Loại khỏi build context: `.venv/`, cache (`__pycache__`, `.pytest_cache`, `.ruff_cache`), `.env*` (tránh lộ secret vào image), `tests/`, `docs/`, `README.md`. Build nhanh hơn và image sạch hơn.
 
 ---
 
@@ -291,10 +312,20 @@ uv run pytest                             # 23 passed
 uv run ruff check .                       # All checks passed!
 ```
 
+Chạy bằng Docker:
+
+```bash
+docker build -t smarthr/ai-matching:dev .
+docker run --rm -p 8000:8000 --env-file .env smarthr/ai-matching:dev
+curl localhost:8000/health
+docker ps                                 # cột STATUS hiện (healthy) sau khoảng 10 giây
+```
+
 ---
 
 ## 6. Bước tiếp theo (Phase 4)
 
+- [x] Dockerfile + `.dockerignore`
 - [ ] Tokenizer tiếng Việt (`underthesea` / `pyvi`) cho BM25
 - [ ] Parse PDF: `pdfplumber` + OCR fallback + `gpt-4o-mini` Structured Outputs → `CvSchema` (`app/parsing/`)
 - [ ] Tạo collection Qdrant `jobs`, `candidates` (dense + sparse + payload index)

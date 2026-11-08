@@ -34,6 +34,17 @@ uv run pytest
 uv run ruff check .
 ```
 
+## Chạy bằng Docker
+
+```bash
+cd ai-matching
+docker build -t smarthr/ai-matching:dev .
+docker run --rm -p 8000:8000 --env-file .env smarthr/ai-matching:dev
+curl localhost:8000/health
+```
+
+Image gồm 2 stage: stage đầu dùng `uv` cài dependency theo `uv.lock` (không gồm nhóm `dev`), stage sau chỉ chứa venv và thư mục `app/`, chạy bằng user không phải root, có `HEALTHCHECK` gọi `/health`.
+
 ## Chuẩn hóa skill
 
 Thêm alias vào `app/skills/skills_alias.yaml` theo dạng `<tên chuẩn>: [alias, ...]`. Loader báo lỗi nếu một alias bị map vào hai skill khác nhau.
