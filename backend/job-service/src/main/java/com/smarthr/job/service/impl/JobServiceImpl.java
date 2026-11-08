@@ -15,11 +15,15 @@ import com.smarthr.job.dto.req.CreateJobReq;
 import com.smarthr.job.dto.req.UpdateJobReq;
 import com.smarthr.job.dto.res.JobRes;
 import com.smarthr.job.mapper.JobMapper;
+import com.smarthr.job.model.entity.Industry;
 import com.smarthr.job.model.entity.Job;
+import com.smarthr.job.model.entity.Location;
 import com.smarthr.job.model.entity.Outbox;
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobStatus;
+import com.smarthr.job.repo.IndustryRepo;
 import com.smarthr.job.repo.JobRepo;
+import com.smarthr.job.repo.LocationRepo;
 import com.smarthr.job.repo.OutboxRepo;
 import com.smarthr.job.service.JobService;
 
@@ -31,6 +35,8 @@ public class JobServiceImpl implements JobService {
 
     private final JobRepo jobRepo;
     private final OutboxRepo outboxRepo;
+    private final IndustryRepo industryRepo;
+    private final LocationRepo locationRepo;
     private final JobMapper jobMapper;
     private final ObjectMapper objectMapper;
 
@@ -38,6 +44,8 @@ public class JobServiceImpl implements JobService {
     @Transactional
     public JobRes createJob(CreateJobReq req, UUID companyId, UUID createdBy) {
         Job job = jobMapper.toEntity(req);
+        job.setIndustry(findIndustry(req.getIndustryId()));
+        job.setLocation(findLocation(req.getLocationId()));
         job.setCompanyId(companyId);
         job.setCreatedBy(createdBy);
         job.setStatus(JobStatus.OPEN);
@@ -56,6 +64,8 @@ public class JobServiceImpl implements JobService {
         Job job = findJobByIdAndValidateOwnership(id, companyId);
 
         jobMapper.updateEntity(job, req);
+        job.setIndustry(findIndustry(req.getIndustryId()));
+        job.setLocation(findLocation(req.getLocationId()));
         Job updatedJob = jobRepo.save(job);
         JobRes res = jobMapper.toResponse(updatedJob);
 
@@ -81,8 +91,8 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<JobRes> searchJobs(String industry, String location, JobStatus status, Long salaryMin, Long salaryMax, JobLevel level, String keyword, Pageable pageable) {
-        return jobRepo.search(industry, location, status, salaryMin, salaryMax, level, keyword, pageable)
+    public Page<JobRes> searchJobs(UUID industryId, UUID locationId, JobStatus status, Long salaryMin, Long salaryMax, JobLevel level, String keyword, Pageable pageable) {
+        return jobRepo.search(industryId, locationId, status, salaryMin, salaryMax, level, keyword, pageable)
                 .map(jobMapper::toResponse);
     }
 
@@ -95,6 +105,16 @@ public class JobServiceImpl implements JobService {
 
         JobRes res = jobMapper.toResponse(closedJob);
         saveOutboxEvent("job.closed", closedJob.getId(), res);
+    }
+
+    private Industry findIndustry(UUID industryId) {
+        return industryRepo.findById(industryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Industry not found"));
+    }
+
+    private Location findLocation(UUID locationId) {
+        return locationRepo.findById(locationId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Location not found"));
     }
 
     private Job findJobByIdAndValidateOwnership(UUID id, UUID companyId) {

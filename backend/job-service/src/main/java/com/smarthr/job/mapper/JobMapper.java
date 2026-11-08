@@ -9,10 +9,14 @@ import org.springframework.stereotype.Component;
 import com.smarthr.job.dto.req.CreateJobReq;
 import com.smarthr.job.dto.req.JobSkillReq;
 import com.smarthr.job.dto.req.UpdateJobReq;
+import com.smarthr.job.dto.res.IndustryRes;
 import com.smarthr.job.dto.res.JobRes;
 import com.smarthr.job.dto.res.JobSkillRes;
+import com.smarthr.job.dto.res.LocationRes;
+import com.smarthr.job.model.entity.Industry;
 import com.smarthr.job.model.entity.Job;
 import com.smarthr.job.model.entity.JobSkill;
+import com.smarthr.job.model.entity.Location;
 
 @Component
 public class JobMapper {
@@ -24,8 +28,6 @@ public class JobMapper {
                 .level(req.getLevel())
                 .jobType(req.getJobType())
                 .workMode(req.getWorkMode())
-                .location(req.getLocation())
-                .industry(req.getIndustry())
                 .salaryMin(req.getSalaryMin())
                 .salaryMax(req.getSalaryMax())
                 .minYearsExp(req.getMinYearsExp())
@@ -56,8 +58,6 @@ public class JobMapper {
         job.setLevel(req.getLevel());
         job.setJobType(req.getJobType());
         job.setWorkMode(req.getWorkMode());
-        job.setLocation(req.getLocation());
-        job.setIndustry(req.getIndustry());
         job.setSalaryMin(req.getSalaryMin());
         job.setSalaryMax(req.getSalaryMax());
         job.setMinYearsExp(req.getMinYearsExp());
@@ -99,8 +99,8 @@ public class JobMapper {
                 .level(job.getLevel())
                 .jobType(job.getJobType())
                 .workMode(job.getWorkMode())
-                .location(job.getLocation())
-                .industry(job.getIndustry())
+                .location(toLocationResponse(job.getLocation()))
+                .industry(toIndustryResponse(job.getIndustry()))
                 .salaryMin(job.getSalaryMin())
                 .salaryMax(job.getSalaryMax())
                 .minYearsExp(job.getMinYearsExp())
@@ -108,6 +108,28 @@ public class JobMapper {
                 .status(job.getStatus())
                 .version(job.getVersion())
                 .skills(skillResponses)
+                .build();
+    }
+
+    public IndustryRes toIndustryResponse(Industry industry) {
+        if (industry == null) {
+            return null;
+        }
+        return IndustryRes.builder()
+                .id(industry.getId())
+                .name(industry.getName())
+                .parentId(industry.getParent() != null ? industry.getParent().getId() : null)
+                .build();
+    }
+
+    public LocationRes toLocationResponse(Location location) {
+        if (location == null) {
+            return null;
+        }
+        return LocationRes.builder()
+                .id(location.getId())
+                .name(location.getName())
+                .parentId(location.getParent() != null ? location.getParent().getId() : null)
                 .build();
     }
 

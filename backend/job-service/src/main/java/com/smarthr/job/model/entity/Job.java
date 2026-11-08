@@ -17,7 +17,10 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -64,11 +67,13 @@ public class Job {
     @Column(name = "work_mode", nullable = false)
     private WorkMode workMode;
 
-    @Column(name = "location", nullable = false, length = 255) 
-    private String location;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "location_id", nullable = false)
+    private Location location;
 
-    @Column(name = "industry", nullable = false, length = 100)
-    private String industry;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "industry_id", nullable = false)
+    private Industry industry;
 
     @Column(name = "salary_min")
     private Long salaryMin;

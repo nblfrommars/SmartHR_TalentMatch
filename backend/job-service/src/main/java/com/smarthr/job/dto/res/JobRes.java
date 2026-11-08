@@ -30,8 +30,8 @@ public class JobRes {
     private JobLevel level;
     private JobType jobType;
     private WorkMode workMode;
-    private String location;
-    private String industry;
+    private LocationRes location;
+    private IndustryRes industry;
     private Long salaryMin;
     private Long salaryMax;
     private Integer minYearsExp;

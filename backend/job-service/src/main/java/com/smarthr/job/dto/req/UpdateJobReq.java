@@ -2,6 +2,7 @@ package com.smarthr.job.dto.req;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobType;
@@ -41,11 +42,11 @@ public class UpdateJobReq {
     @NotNull
     private WorkMode workMode;
 
-    @NotBlank
-    private String location;
+    @NotNull
+    private UUID locationId;
 
-    @NotBlank
-    private String industry;
+    @NotNull
+    private UUID industryId;
 
     @Positive
     private Long salaryMin;

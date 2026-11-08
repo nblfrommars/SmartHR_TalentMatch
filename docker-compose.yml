@@ -10,12 +10,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-1234}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
       POSTGRES_DB: postgres
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+      - ./docker/postgres/init_databases.sql:/docker-entrypoint-initdb.d/init_databases.sql:ro
+      # Not in initdb.d on purpose: init_databases.sql includes it after connecting to job_db
+      - ./docker/postgres/job_db.sql:/sql/job_db.sql:ro
       - smarthr_pgdata:/var/lib/postgresql/data
     networks:
       - smarthr-net

@@ -26,8 +26,8 @@ public interface JobRepo extends JpaRepository<Job, UUID> {
 
     @Query("""
         SELECT j FROM Job j
-        WHERE (:industry IS NULL OR j.industry = :industry)
-          AND (:location IS NULL OR j.location = :location)
+        WHERE (:industryId IS NULL OR j.industry.id = :industryId OR j.industry.parent.id = :industryId)
+          AND (:locationId IS NULL OR j.location.id = :locationId OR j.location.parent.id = :locationId)
           AND (:status IS NULL OR j.status = :status)
           AND (:salaryMin IS NULL OR j.salaryMax >= :salaryMin)
           AND (:salaryMax IS NULL OR j.salaryMin <= :salaryMax)
@@ -35,8 +35,8 @@ public interface JobRepo extends JpaRepository<Job, UUID> {
           AND (:keyword IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :keyword, '%')))
     """)
     Page<Job> search(
-        @Param("industry") String industry,
-        @Param("location") String location,
+        @Param("industryId") UUID industryId,
+        @Param("locationId") UUID locationId,
         @Param("status") JobStatus status,
         @Param("salaryMin") Long salaryMin,
         @Param("salaryMax") Long salaryMax,
