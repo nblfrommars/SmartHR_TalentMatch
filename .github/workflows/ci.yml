@@ -127,11 +127,11 @@ jobs:
           echo "backend_services=$backend_json" >> "$GITHUB_OUTPUT"
 
           ai=false
-          if { [ -f ai-service/pyproject.toml ] || [ -f ai-service/requirements.txt ]; } && changed '^ai-service/'; then ai=true; fi
+          if { [ -f ai-matching/pyproject.toml ] || [ -f ai-matching/requirements.txt ]; } && changed '^ai-matching/'; then ai=true; fi
           echo "ai=$ai" >> "$GITHUB_OUTPUT"
 
           ai_eval=false
-          if [ "$ai" = true ] && [ -f ai-service/eval/run_eval.py ]; then ai_eval=true; fi
+          if [ "$ai" = true ] && [ -f ai-matching/eval/run_eval.py ]; then ai_eval=true; fi
           echo "ai_eval=$ai_eval" >> "$GITHUB_OUTPUT"
 
           frontend=false
@@ -139,7 +139,7 @@ jobs:
           echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
 
           compose=false
-          if [ -f docker-compose.yml ] && changed '^docker-compose\.yml$|^\.env\.example$|^backend/|^ai-service/|^frontend/'; then compose=true; fi
+          if [ -f docker-compose.yml ] && changed '^docker-compose\.yml$|^\.env\.example$|^backend/|^ai-matching/|^frontend/'; then compose=true; fi
           echo "compose=$compose" >> "$GITHUB_OUTPUT"
 
           echo "backend=$backend_json ai=$ai ai_eval=$ai_eval frontend=$frontend compose=$compose"
@@ -190,14 +190,14 @@ jobs:
   # ---------------------------------------------------------------------------
   # 4. AI service: FastAPI (lint + unit test)
   # ---------------------------------------------------------------------------
-  ai-service:
+  ai-matching:
     name: AI service
     needs: [conflict-check, changes]
     if: needs.changes.outputs.ai == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ai-service
+        working-directory: ai-matching
     steps:
       - uses: actions/checkout@v4
 
@@ -206,15 +206,15 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: |
-            ai-service/requirements*.txt
-            ai-service/pyproject.toml
+            ai-matching/requirements*.txt
+            ai-matching/pyproject.toml
 
       - name: Cài dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e .; fi
+          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e ".[dev]"; fi
           pip install ruff pytest
 
       - name: Lint (ruff)
@@ -230,7 +230,7 @@ jobs:
   # ---------------------------------------------------------------------------
   ai-eval:
     name: AI evaluation
-    needs: [ai-service, changes]
+    needs: [ai-matching, changes]
     if: needs.changes.outputs.ai_eval == 'true'
     runs-on: ubuntu-latest
     services:
@@ -243,7 +243,7 @@ jobs:
       QDRANT_URL: http://localhost:6333
     defaults:
       run:
-        working-directory: ai-service
+        working-directory: ai-matching
     steps:
       - name: Kiểm tra secret
         id: secret
@@ -265,8 +265,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: |
-            ai-service/requirements*.txt
-            ai-service/pyproject.toml
+            ai-matching/requirements*.txt
+            ai-matching/pyproject.toml
 
       - name: Cài dependencies
         if: steps.secret.outputs.ok == 'true'
@@ -274,7 +274,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e .; fi
+          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e ".[dev]"; fi
 
       - name: Chạy evaluation và kiểm tra ngưỡng
         if: steps.secret.outputs.ok == 'true'
@@ -290,7 +290,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ai-eval-report
-          path: ai-service/eval/report.md
+          path: ai-matching/eval/report.md
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ jobs:
   ci-success:
     name: CI success
     if: always()
-    needs: [conflict-check, changes, backend, ai-service, ai-eval, frontend, compose-validate]
+    needs: [conflict-check, changes, backend, ai-matching, ai-eval, frontend, compose-validate]
     runs-on: ubuntu-latest
     steps:
       - name: Kiểm tra kết quả các job

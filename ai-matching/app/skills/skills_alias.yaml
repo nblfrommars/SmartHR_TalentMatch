@@ -1,0 +1,69 @@
+# Bảng chuẩn hóa skill: <tên chuẩn>: [alias, ...]
+# Áp dụng GIỐNG HỆT cho cả job và CV (xem ARCHITECTURE.md mục 3.10).
+# So khớp không phân biệt hoa thường; "-" và "_" được coi như khoảng trắng,
+# nên "spring-boot" và "Spring_Boot" tự về "spring boot" mà không cần khai báo.
+
+# Ngôn ngữ lập trình
+javascript: [js, ecmascript, es6]
+typescript: [ts]
+python: [python3, py]
+golang: [go, go lang]
+c++: [cpp, cplusplus]
+c#: [csharp, c sharp]
+kotlin: [kt]
+
+# Backend
+spring boot: [springboot]
+spring framework: [spring]
+node.js: [nodejs, node]
+.net: [dotnet, dot net]
+asp.net core: [aspnet core, asp.net, aspnetcore]
+fastapi: [fast api]
+django: []
+express.js: [express, expressjs]
+nestjs: [nest.js, nest]
+
+# Frontend
+react: [reactjs, react.js]
+vue.js: [vue, vuejs]
+angular: [angularjs, angular.js]
+next.js: [nextjs, next]
+tailwindcss: [tailwind, tailwind css]
+html: [html5]
+css: [css3]
+
+# Database / storage
+postgresql: [postgres, psql, pgsql]
+mysql: []
+mongodb: [mongo]
+redis: []
+elasticsearch: [elastic search]
+sql server: [mssql, ms sql, microsoft sql server]
+
+# Messaging
+kafka: [apache kafka]
+rabbitmq: [rabbit mq]
+
+# DevOps / cloud
+docker: []
+kubernetes: [k8s, kube]
+aws: [amazon web services]
+gcp: [google cloud, google cloud platform]
+azure: [microsoft azure]
+ci/cd: [cicd, ci cd]
+git: []
+linux: []
+terraform: []
+
+# AI / data
+machine learning: [ml]
+deep learning: [dl]
+natural language processing: [nlp]
+large language model: [llm, llms]
+pytorch: [torch]
+tensorflow: []
+
+# Chứng chỉ
+aws saa: [aws solutions architect associate, aws certified solutions architect associate]
+ielts: []
+toeic: []
