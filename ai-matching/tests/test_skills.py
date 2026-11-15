@@ -47,9 +47,22 @@ def test_normalize_many_dedupes_and_keeps_order(normalizer):
     assert normalizer.normalize_many(raw) == ["react", "kubernetes", "java"]
 
 
-def test_to_sparse_token():
-    assert to_sparse_token("spring boot") == "spring_boot"
-    assert to_sparse_token("java") == "java"
+@pytest.mark.parametrize(
+    ("skill", "token"),
+    [
+        ("java", "java"),
+        ("spring boot", "spring_boot"),
+        ("c++", "c_plus_plus"),
+        ("c#", "c_sharp"),
+        ("node.js", "node_dot_js"),
+        (".net", "dot_net"),
+        ("asp.net core", "asp_dot_net_core"),
+        ("ci/cd", "ci_cd"),
+        ("phân tích dữ liệu", "phân_tích_dữ_liệu"),
+    ],
+)
+def test_to_sparse_token(skill, token):
+    assert to_sparse_token(skill) == token
 
 
 def test_conflicting_alias_is_rejected():

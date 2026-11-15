@@ -17,6 +17,11 @@ class Settings(BaseSettings):
 
     skills_alias_path: Path = APP_DIR / "skills" / "skills_alias.yaml"
 
+    # Ghi vào payload Qdrant; đổi khi đổi model/cách dựng document để biết cần re-index
+    embedding_version: str = "text-embedding-3-small@v1"
+    # ~1.500 token (ước lượng ~4 ký tự/token), giới hạn phần mô tả job / tóm tắt kinh nghiệm
+    document_max_chars: int = 6000
+
     # Dùng từ Phase 4 trở đi (Qdrant, Kafka, Redis, OpenAI)
     qdrant_url: str = "http://localhost:6333"
     kafka_bootstrap_servers: str = "localhost:9092"

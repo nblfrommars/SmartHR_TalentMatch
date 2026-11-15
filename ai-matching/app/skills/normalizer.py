@@ -19,6 +19,9 @@ from app.core.config import get_settings
 
 _SEPARATORS = re.compile(r"[-_\s]+")
 _EDGE_PUNCTUATION = " \t\n,;:!?()[]{}\"'`|"
+_NON_WORD = re.compile(r"[^\w]+")
+# Tokenizer BM25 bỏ mọi ký tự không phải chữ/số, nên ký hiệu có nghĩa phải đổi thành chữ
+_SPARSE_SYMBOLS = {"+": " plus ", "#": " sharp ", ".": " dot "}
 
 
 def clean_skill(raw: str) -> str:
@@ -28,8 +31,15 @@ def clean_skill(raw: str) -> str:
 
 
 def to_sparse_token(skill: str) -> str:
-    """Nối skill nhiều từ bằng "_" để BM25 coi là một token: "spring boot" -> "spring_boot"."""
-    return skill.replace(" ", "_")
+    """Biến skill đã chuẩn hóa thành MỘT token BM25.
+
+    "spring boot" -> "spring_boot", "c++" -> "c_plus_plus", "node.js" -> "node_dot_js",
+    "c#" -> "c_sharp", "ci/cd" -> "ci_cd". Không có bước này, BM25 sẽ cắt "node.js" thành
+    "node" và "js", còn "c++" chỉ còn "c".
+    """
+    for symbol, word in _SPARSE_SYMBOLS.items():
+        skill = skill.replace(symbol, word)
+    return "_".join(_NON_WORD.sub(" ", skill).split())
 
 
 class SkillNormalizer:

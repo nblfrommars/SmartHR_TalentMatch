@@ -115,7 +115,10 @@ SmartHR_TalentMatch/
 │   │   ├── parsing/              # PDF → text → JSON CV
 │   │   ├── retrieval/            # Hybrid search, filter, re-score
 │   │   ├── explain/              # LLM sinh giải thích
-│   │   └── skills/               # Chuẩn hóa skill (taxonomy, alias)
+│   │   ├── skills/               # Chuẩn hóa skill (taxonomy, alias)
+│   │   ├── schemas/              # Pydantic: JobSnapshot, CvSnapshot, CvSchema
+│   │   ├── documents/            # Dựng dense text, sparse text, payload cho Qdrant
+│   │   └── text/                 # Làm sạch HTML, loại PII, tách từ tiếng Việt (pyvi)
 │   ├── eval/                     # Golden dataset + run_eval.py
 │   └── tests/
 └── frontend/

@@ -10,6 +10,9 @@ app/
 ├── core/           # config (env AI_*), logging có correlation-id, middleware
 ├── api/            # FastAPI routers (hiện có GET /health)
 ├── skills/         # Chuẩn hóa skill: skills_alias.yaml + SkillNormalizer
+├── schemas/        # Pydantic: JobSnapshot, CvSnapshot (event), CvSchema (kết quả parse)
+├── documents/      # Job/CV → IndexDocument (dense text, sparse text, payload không PII)
+├── text/           # Làm sạch HTML, loại PII, tách từ tiếng Việt (pyvi)
 ├── ingestion/      # (Phase 4) Kafka consumers → embedding → Qdrant
 ├── parsing/        # (Phase 4) PDF → text → JSON CV
 ├── retrieval/      # (Phase 5) Hybrid search, filter, re-score
@@ -55,4 +58,19 @@ from app.skills import get_normalizer, to_sparse_token
 n = get_normalizer()
 n.normalize_many(["ReactJS", "k8s", "Spring-Boot"])  # ["react", "kubernetes", "spring boot"]
 to_sparse_token("spring boot")                         # "spring_boot" (token cho BM25)
+to_sparse_token("c++")                                 # "c_plus_plus"
+```
+
+## Dựng document cho Qdrant
+
+Chi tiết xem [`docs/02-document-builder.md`](docs/02-document-builder.md).
+
+```python
+from app.documents import build_job_document
+from app.schemas import JobSnapshot
+
+doc = build_job_document(JobSnapshot.model_validate(event["payload"]))
+doc.dense_text   # gửi đi embedding (OpenAI)
+doc.sparse_text  # đưa vào BM25 (fastembed)
+doc.payload      # lưu vào Qdrant để filter / re-score
 ```
