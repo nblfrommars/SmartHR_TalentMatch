@@ -1,21 +1,10 @@
 package com.smarthr.job.scheduler;
 
-import java.time.OffsetDateTime;
-import java.util.List;
-
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.smarthr.job.dto.res.JobRes;
-import com.smarthr.job.mapper.JobMapper;
-import com.smarthr.job.model.entity.Job;
-import com.smarthr.job.model.entity.Outbox;
-import com.smarthr.job.model.enums.JobStatus;
-import com.smarthr.job.repo.JobRepo;
-import com.smarthr.job.repo.OutboxRepo;
+import com.smarthr.job.service.JobExpirationService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,32 +14,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class JobExpirationScheduler {
 
-    private final JobRepo jobRepo;
-    private final OutboxRepo outboxRepo;
-    private final JobMapper jobMapper;
-    private final ObjectMapper objectMapper;
+    private final JobExpirationService expirationService;
+
+    @Value("${app.expiration.batch-size:100}")
+    private int batchSize;
 
     @Scheduled(cron = "0 */5 * * * *")
-    @Transactional
     public void closeExpiredJobs() {
-        List<Job> expiredJobs = jobRepo.findByStatusAndDeadlineBefore(JobStatus.OPEN, OffsetDateTime.now());
+        int closed;
+        int total = 0;
+        do {
+            closed = expirationService.closeExpiredBatch(batchSize);
+            total += closed;
+        } while (closed >= batchSize);
 
-        for (Job job : expiredJobs) {
-            job.setStatus(JobStatus.CLOSED);
-            Job closedJob = jobRepo.save(job);
-
-            JobRes res = jobMapper.toResponse(closedJob);
-            try {
-                String payload = objectMapper.writeValueAsString(res);
-                Outbox outbox = Outbox.builder()
-                        .eventType("job.expired")
-                        .aggregateId(closedJob.getId())
-                        .payload(payload)
-                        .build();
-                outboxRepo.save(outbox);
-            } catch (JsonProcessingException e) {
-                log.error("Failed to serialize job.expired event for jobId: {}", closedJob.getId(), e);
-            }
+        if (total > 0) {
+            log.info("Closed {} expired job(s)", total);
         }
     }
 }

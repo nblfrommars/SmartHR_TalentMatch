@@ -15,7 +15,6 @@ create table if not exists locations (
 );
 
 create index if not exists idx_locations_parent_id on locations (parent_id);
--- Province names are unique; area names only need to be unique within their province.
 create unique index if not exists uq_locations_province_name on locations (name) where parent_id is null;
 create unique index if not exists uq_locations_area_name on locations (parent_id, name) where parent_id is not null;
 
@@ -63,7 +62,6 @@ create table if not exists outbox (
 
 create index if not exists idx_outbox_published_created_at on outbox (published, created_at);
 
--- Seed data: root industries, then child industries linked by name.
 insert into industries (name) values
     ('Information Technology'), ('Finance & Banking'), ('Marketing & Sales'),
     ('Manufacturing'), ('Education'), ('Healthcare')

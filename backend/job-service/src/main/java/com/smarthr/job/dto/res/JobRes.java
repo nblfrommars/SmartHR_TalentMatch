@@ -38,5 +38,8 @@ public class JobRes {
     private OffsetDateTime deadline;
     private JobStatus status;
     private Integer version;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
+    private OffsetDateTime publishedAt;
     private List<JobSkillRes> skills;
 }

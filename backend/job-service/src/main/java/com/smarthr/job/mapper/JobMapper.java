@@ -1,14 +1,18 @@
 package com.smarthr.job.mapper;
 
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
-import com.smarthr.job.dto.req.CreateJobReq;
+import com.smarthr.job.dto.req.JobReq;
 import com.smarthr.job.dto.req.JobSkillReq;
-import com.smarthr.job.dto.req.UpdateJobReq;
 import com.smarthr.job.dto.res.IndustryRes;
 import com.smarthr.job.dto.res.JobRes;
 import com.smarthr.job.dto.res.JobSkillRes;
@@ -21,7 +25,7 @@ import com.smarthr.job.model.entity.Location;
 @Component
 public class JobMapper {
 
-    public Job toEntity(CreateJobReq req) {
+    public Job toEntity(JobReq req) {
         Job job = Job.builder()
                 .title(req.getTitle())
                 .description(req.getDescription())
@@ -33,26 +37,11 @@ public class JobMapper {
                 .minYearsExp(req.getMinYearsExp())
                 .deadline(req.getDeadline())
                 .build();
-
-        if (req.getSkills() != null) {
-            for (JobSkillReq skillReq : req.getSkills()) {
-                JobSkill.JobSkillId id = JobSkill.JobSkillId.builder()
-                        .skill(skillReq.getSkill())
-                        .build();
-
-                JobSkill skill = JobSkill.builder()
-                        .jobSkillId(id)
-                        .mustHave(Boolean.TRUE.equals(skillReq.getMustHave()))
-                        .required(skillReq.getRequired() == null || skillReq.getRequired())
-                        .build();
-
-                job.addSkill(skill);
-            }
-        }
+        syncSkills(job, req.getSkills());
         return job;
     }
 
-    public void updateEntity(Job job, UpdateJobReq req) {
+    public void updateEntity(Job job, JobReq req) {
         job.setTitle(req.getTitle());
         job.setDescription(req.getDescription());
         job.setLevel(req.getLevel());
@@ -62,24 +51,43 @@ public class JobMapper {
         job.setSalaryMax(req.getSalaryMax());
         job.setMinYearsExp(req.getMinYearsExp());
         job.setDeadline(req.getDeadline());
+        syncSkills(job, req.getSkills());
+    }
 
-        job.getJobSkills().clear();
-        if (req.getSkills() != null) {
-            for (JobSkillReq skillReq : req.getSkills()) {
-                JobSkill.JobSkillId id = JobSkill.JobSkillId.builder()
-                        .jobId(job.getId())
-                        .skill(skillReq.getSkill())
-                        .build();
-
-                JobSkill skill = JobSkill.builder()
-                        .jobSkillId(id)
-                        .mustHave(Boolean.TRUE.equals(skillReq.getMustHave()))
-                        .required(skillReq.getRequired() == null || skillReq.getRequired())
-                        .build();
-
-                job.addSkill(skill);
+    private void syncSkills(Job job, List<JobSkillReq> requested) {
+        Map<String, JobSkillReq> desired = new LinkedHashMap<>();
+        if (requested != null) {
+            for (JobSkillReq r : requested) {
+                desired.putIfAbsent(normalize(r.getSkill()), r);
             }
         }
+
+        Set<String> existing = new HashSet<>();
+        job.getJobSkills().removeIf(js -> !desired.containsKey(normalize(js.getJobSkillId().getSkill())));
+        for (JobSkill js : job.getJobSkills()) {
+            String key = normalize(js.getJobSkillId().getSkill());
+            existing.add(key);
+            JobSkillReq r = desired.get(key);
+            js.setMustHave(Boolean.TRUE.equals(r.getMustHave()));
+            js.setRequired(r.getRequired() == null || r.getRequired());
+        }
+
+        for (Map.Entry<String, JobSkillReq> e : desired.entrySet()) {
+            if (existing.contains(e.getKey())) {
+                continue;
+            }
+            JobSkillReq r = e.getValue();
+            JobSkill skill = JobSkill.builder()
+                    .jobSkillId(JobSkill.JobSkillId.builder().jobId(job.getId()).skill(r.getSkill().trim()).build())
+                    .mustHave(Boolean.TRUE.equals(r.getMustHave()))
+                    .required(r.getRequired() == null || r.getRequired())
+                    .build();
+            job.addSkill(skill);
+        }
+    }
+
+    private static String normalize(String skill) {
+        return skill.trim().toLowerCase(Locale.ROOT);
     }
 
     public JobRes toResponse(Job job) {
@@ -107,6 +115,9 @@ public class JobMapper {
                 .deadline(job.getDeadline())
                 .status(job.getStatus())
                 .version(job.getVersion())
+                .createdAt(job.getCreatedAt())
+                .updatedAt(job.getUpdatedAt())
+                .publishedAt(job.getPublishedAt())
                 .skills(skillResponses)
                 .build();
     }

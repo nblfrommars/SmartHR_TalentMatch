@@ -16,8 +16,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ./docker/postgres/init_databases.sql:/docker-entrypoint-initdb.d/init_databases.sql:ro
-      # Not in initdb.d on purpose: init_databases.sql includes it after connecting to job_db
-      - ./docker/postgres/job_db.sql:/sql/job_db.sql:ro
       - smarthr_pgdata:/var/lib/postgresql/data
     networks:
       - smarthr-net
@@ -52,6 +50,89 @@ services:
     networks:
       - smarthr-net
 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - smarthr-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - smarthr_redisdata:/data
+    networks:
+      - smarthr-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - smarthr_qdrantdata:/qdrant/storage
+    networks:
+      - smarthr-net
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env (see .env.example)}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - smarthr_miniodata:/data
+    networks:
+      - smarthr-net
+
+  job-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: job-service
+    container_name: job-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/job_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8082:8082"
+    networks:
+      - smarthr-net
+
 volumes:
   smarthr_pgdata:
   smarthr_kafkadata:
+  smarthr_redisdata:
+  smarthr_qdrantdata:
+  smarthr_miniodata:

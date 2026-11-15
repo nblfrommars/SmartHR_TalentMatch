@@ -17,11 +17,14 @@ public interface JobService {
 
     JobRes updateJob(UUID id, UpdateJobReq req, UUID companyId);
 
-    JobRes getJobById(UUID id);
+    JobRes getJobById(UUID id, UUID companyId);
 
-    Page<JobRes> getJobsByCompany(UUID companyId, Pageable pageable);
+    Page<JobRes> getJobsByCompany(UUID companyId, JobStatus status, Pageable pageable);
 
-    Page<JobRes> searchJobs(UUID industryId, UUID locationId, JobStatus status, Long salaryMin, Long salaryMax, JobLevel level, String keyword, Pageable pageable);
+    Page<JobRes> searchJobs(UUID industryId, UUID locationId, Long salaryMin, Long salaryMax, JobLevel level,
+            String keyword, Pageable pageable);
 
     void closeJob(UUID id, UUID companyId);
+
+    void deleteJob(UUID id, UUID companyId);
 }

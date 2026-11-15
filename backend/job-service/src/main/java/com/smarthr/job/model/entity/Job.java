@@ -5,6 +5,10 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import com.smarthr.job.model.enums.JobLevel;
 import com.smarthr.job.model.enums.JobStatus;
 import com.smarthr.job.model.enums.JobType;
@@ -30,19 +34,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Entity 
+@Entity
 @Table(name = "jobs")
-@NoArgsConstructor 
-@AllArgsConstructor 
-@Getter 
-@Setter 
-@Builder    
+@NoArgsConstructor
+@AllArgsConstructor
+@Getter
+@Setter
+@Builder
 public class Job {
-    @Id 
+    @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
-    private UUID id;   
-    
+    private UUID id;
+
     @Column(name = "company_id", nullable = false)
     private UUID companyId;
 
@@ -92,12 +96,23 @@ public class Job {
     @Column(name = "status", nullable = false)
     private JobStatus status = JobStatus.DRAFT;
 
-    @Version 
-    @Builder.Default
+    @Version
     @Column(name = "version", nullable = false)
-    private Integer version = 0;
+    private Integer version;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "published_at")
+    private OffsetDateTime publishedAt;
 
     @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     @Builder.Default
     private Set<JobSkill> jobSkills = new HashSet<>();
 

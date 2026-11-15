@@ -1,8 +1,7 @@
 package com.smarthr.job.model.enums;
 
 public enum JobStatus {
-    DRAFT, 
+    DRAFT,
     OPEN,
-    CLOSED,
-    EXPIRED
+    CLOSED
 }
