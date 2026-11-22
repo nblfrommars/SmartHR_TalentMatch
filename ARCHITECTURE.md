@@ -80,7 +80,7 @@ SmartHR TalentMatch là website tuyển dụng có 3 nhóm người dùng:
 | **AI service** | Python 3.11 + FastAPI | Hệ sinh thái AI/RAG mạnh nhất |
 | | OpenAI `text-embedding-3-small` (1536-d) | Dense embedding |
 | | OpenAI `gpt-4o-mini` (Structured Outputs) | Parse CV ra JSON, sinh giải thích kết quả match |
-| | `fastembed` với `Qdrant/bm25` | Sparse vector BM25, chạy local, rất nhanh |
+| | BM25 tự viết (`app/embedding/sparse.py`) | Sparse vector BM25, chạy local; không cần onnxruntime/tải model, không stem tiếng Anh lên token tiếng Việt |
 | | `pdfplumber` / `pypdf`, `pytesseract` (dự phòng) | Trích text từ PDF (OCR khi PDF là ảnh scan) |
 | | `qdrant-client`, `aiokafka`, Pydantic v2 | Client vector DB, consumer Kafka, validate schema |
 | | `ragas` + script eval tự viết | Đánh giá AI |
@@ -118,7 +118,9 @@ SmartHR_TalentMatch/
 │   │   ├── skills/               # Chuẩn hóa skill (taxonomy, alias)
 │   │   ├── schemas/              # Pydantic: JobSnapshot, CvSnapshot, CvSchema
 │   │   ├── documents/            # Dựng dense text, sparse text, payload cho Qdrant
-│   │   └── text/                 # Làm sạch HTML, loại PII, tách từ tiếng Việt (pyvi)
+│   │   ├── text/                 # Làm sạch HTML, loại PII, tách từ tiếng Việt (pyvi)
+│   │   ├── embedding/            # Dense (OpenAI/hashing) + sparse BM25, cache embedding
+│   │   └── vectorstore/          # Truy cập Qdrant: collection, upsert, payload, đọc lại vector
 │   ├── eval/                     # Golden dataset + run_eval.py
 │   └── tests/
 └── frontend/
@@ -259,7 +261,7 @@ sequenceDiagram
     K->>AI: consume job.created
     AI->>AI: chuẩn hóa skill (alias → canonical), dựng "job document"
     AI->>OAI: embeddings(text-embedding-3-small)
-    AI->>AI: fastembed BM25 → sparse vector
+    AI->>AI: BM25 → sparse vector
     AI->>QD: upsert point id=jobId {dense, sparse, payload}
     AI->>AI: lưu event_id đã xử lý (idempotent)
 ```
@@ -380,7 +382,8 @@ Từ CV đã cấu trúc, dựng **2 dạng query**:
 #### Bước 2: Encode
 
 - Dense: `text-embedding-3-small`, cache theo `hash(text)` trong Redis, không embed lại nếu CV không đổi.
-- Sparse: `fastembed.SparseTextEmbedding("Qdrant/bm25")` chạy local, mất vài ms. Collection bật `modifier: idf` để Qdrant tự tính IDF trên toàn corpus.
+- Sparse: BM25 tự viết (`app/embedding/sparse.py`, cùng công thức TF với `Qdrant/bm25` của fastembed: k1=1.2, b=0.75), chạy local, mất vài ms. Collection bật `modifier: idf` để Qdrant tự tính IDF trên toàn corpus.
+- Khi gợi ý, query dùng lại **vector đã index** của CV (đọc từ Qdrant), nên không phải gọi OpenAI lúc search.
 
 #### Bước 3: Hard Filter (bắt buộc, không thương lượng)
 
@@ -650,7 +653,7 @@ client.create_collection(
 
 **Skill normalization** (`ai-matching/app/skills/`): file `skills_alias.yaml` (ví dụ `reactjs, react.js → react`; `k8s → kubernetes`; `js → javascript`; `springboot, spring-boot → spring boot`), lowercase, bỏ dấu câu. Áp dụng **giống hệt** cho cả job và CV. Đây là điều kiện để sparse search và `s_skill` chạy đúng. Phase sau có thể map sang chuẩn ESCO/O*NET.
 
-**Tiếng Việt với BM25:** `Qdrant/bm25` tokenize theo khoảng trắng và stemmer tiếng Anh. Tiếng Việt cần (1) chuẩn hóa Unicode NFC, (2) tách từ ghép bằng `underthesea` / `pyvi` ("phát triển" → `phát_triển`) trước khi đưa vào BM25, (3) dùng **cùng một tokenizer** khi index và khi query.
+**Tiếng Việt với BM25:** BM25 tokenize theo khoảng trắng. Tiếng Việt cần (1) chuẩn hóa Unicode NFC, (2) tách từ ghép bằng `underthesea` / `pyvi` ("phát triển" → `phát_triển`) trước khi đưa vào BM25, (3) dùng **cùng một tokenizer** khi index và khi query.
 
 ### 3.11 Đánh giá AI: cách đo hệ thống hoạt động tốt hay không
 
@@ -802,21 +805,21 @@ Ngưỡng nằm ở `eval/thresholds.yaml`. Trong CI, Qdrant chạy bằng servi
 - **DoD:** Upload, xem lại, sửa, lưu CV hoàn chỉnh.
 
 ### - [ ] Phase 4: AI service, ingestion
-- [ ] Khung FastAPI, cấu hình, health check, logging có correlation-id
-- [ ] Parse PDF: pdfplumber + OCR fallback + gpt-4o-mini Structured Outputs → CvSchema
-- [ ] Skill normalization (`skills_alias.yaml`) + tokenizer tiếng Việt
-- [ ] Tạo collection Qdrant `jobs`, `candidates` (dense + sparse + payload index)
-- [ ] Kafka consumers: `job.events`, `cv.events` → embed → upsert/set_payload/delete, idempotent
+- [x] Khung FastAPI, cấu hình, health check, logging có correlation-id
+- [ ] Parse PDF: pdfplumber + OCR fallback + gpt-4o-mini Structured Outputs → CvSchema *(xong, trừ OCR; chưa chạy với OpenAI thật)*
+- [x] Skill normalization (`skills_alias.yaml`) + tokenizer tiếng Việt
+- [x] Tạo collection Qdrant `jobs`, `candidates` (dense + sparse + payload index)
+- [ ] Kafka consumers: `job.events`, `cv.events` → embed → upsert/set_payload/delete, idempotent *(handler idempotent đã xong; còn consumer, chờ chốt event envelope)*
 - [ ] Script `reindex` rebuild Qdrant từ Postgres
 - **DoD:** Đăng job, sau dưới 10s đã thấy point trong Qdrant; parse PDF mẫu đúng.
 
 ### - [ ] Phase 5: Hybrid Search và Recommendation
-- [ ] Query builder (dense text + sparse text)
-- [ ] Hard filter (status, deadline, filter của user, job đã apply)
-- [ ] Qdrant prefetch dense + sparse, fusion RRF
-- [ ] Re-scoring + luật cứng (`must_have`, `s_skill`, `τ`) + đa dạng hóa
-- [ ] LLM explanation + cache Redis + graceful degradation
-- [ ] Reverse matching cho HR (job → candidates) + truy vấn tự do
+- [x] Query builder (dense text + sparse text)
+- [x] Hard filter (status, deadline, filter của user, job đã apply)
+- [x] Qdrant prefetch dense + sparse, fusion RRF
+- [x] Re-scoring + luật cứng (`must_have`, `s_skill`, `τ`) + đa dạng hóa
+- [ ] LLM explanation + cache Redis + graceful degradation *(giải thích bằng template đã xong, cũng là đường lui khi LLM lỗi)*
+- [ ] Reverse matching cho HR (job → candidates) + truy vấn tự do *(reverse matching xong; còn truy vấn tự do)*
 - **DoD:** Test constraint compliance (mục 3.11.4) đạt 100%.
 
 ### - [ ] Phase 6: Application và Notification

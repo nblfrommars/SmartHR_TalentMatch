@@ -7,16 +7,18 @@ AI Matching service của SmartHR TalentMatch (Python 3.11 + FastAPI): parse CV,
 ```
 app/
 ├── main.py         # create_app(): FastAPI + middleware + routers
-├── core/           # config (env AI_*), logging có correlation-id, middleware
-├── api/            # FastAPI routers (hiện có GET /health)
+├── core/           # config (env AI_*), logging, middleware, container (khởi tạo thành phần)
+├── api/            # Routers: /health, /ai/recommendations, /ai/search, /ai/cv/parse, /ai/internal
 ├── skills/         # Chuẩn hóa skill: skills_alias.yaml + SkillNormalizer
 ├── schemas/        # Pydantic: JobSnapshot, CvSnapshot (event), CvSchema (kết quả parse)
 ├── documents/      # Job/CV → IndexDocument (dense text, sparse text, payload không PII)
 ├── text/           # Làm sạch HTML, loại PII, tách từ tiếng Việt (pyvi)
-├── ingestion/      # (Phase 4) Kafka consumers → embedding → Qdrant
-├── parsing/        # (Phase 4) PDF → text → JSON CV
-├── retrieval/      # (Phase 5) Hybrid search, filter, re-score
-└── explain/        # (Phase 5) LLM sinh giải thích
+├── embedding/      # Dense (OpenAI/hashing) + sparse BM25, cache embedding
+├── vectorstore/    # Qdrant: collection, upsert, payload, đọc lại vector
+├── ingestion/      # Indexer + xử lý job/cv events (idempotent); Kafka consumer chưa nối
+├── parsing/        # PDF → text → JSON CV (POST /ai/cv/parse)
+├── retrieval/      # Hybrid search, filter, re-score (weights.yaml), API gợi ý
+└── explain/        # Giải thích kết quả match (template; LLM ở bước sau)
 tests/
 ```
 
@@ -29,6 +31,15 @@ cp .env.example .env
 uv run uvicorn app.main:app --reload --port 8000
 curl localhost:8000/health
 ```
+
+## Chạy thử không cần Docker / OpenAI
+
+```bash
+AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=true \
+  uv run uvicorn app.main:app --port 8000
+```
+
+Nạp job/CV qua `POST /ai/internal/events/job|cv`, rồi gọi `GET /ai/recommendations/jobs?cvId=...`. Chi tiết: [`docs/03-index-search-parse.md`](docs/03-index-search-parse.md).
 
 ## Test và lint
 
