@@ -27,8 +27,11 @@ public class CVProfile {
     @Column(name = "work_location_id")
     private Long workLocationId;
 
-    @Column(name = "image_url")
-    private String imageUrl;
+    @Column(name = "image_attachment_id")
+    private UUID imageAttachmentId;
+
+    @Column(name = "cv_attachment_id")
+    private UUID cvAttachmentId;
 
     @Column(name = "summary", columnDefinition = "TEXT")
     private String summary;

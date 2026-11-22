@@ -12,7 +12,8 @@ public class CVDetailResponse {
     private UUID userId;
     private Long positionId;
     private Long workLocationId;
-    private String imageUrl;
+    private UUID imageAttachmentId;
+    private UUID cvAttachmentId;
     private String summary;
     private EduLevel eduLevel;
     private String education;

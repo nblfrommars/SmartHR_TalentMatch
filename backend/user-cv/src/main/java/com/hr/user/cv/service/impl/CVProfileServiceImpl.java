@@ -16,11 +16,13 @@ import com.hr.user.cv.dto.request.CreateCVProfileRequest;
 import com.hr.user.cv.dto.response.CVDetailResponse;
 import com.hr.user.cv.dto.response.CVSkillResponse;
 import com.hr.user.cv.entity.CVProfile;
+import com.hr.user.cv.entity.Attachment;
 import com.hr.user.cv.entity.Skill;
 import com.hr.user.cv.entity.User;
 import com.hr.user.cv.enums.SkillStatus;
 import com.hr.user.cv.enums.UserRole;
 import com.hr.user.cv.repository.CVProfileRepository;
+import com.hr.user.cv.repository.AttachmentRepository;
 import com.hr.user.cv.repository.LocationRepository;
 import com.hr.user.cv.repository.PositionRepository;
 import com.hr.user.cv.repository.SkillRepository;
@@ -33,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 public class CVProfileServiceImpl {
 
     private final CVProfileRepository cvProfileRepository;
+    private final AttachmentRepository attachmentRepository;
     private final UserRepository userRepository;
     private final PositionRepository positionRepository;
     private final LocationRepository locationRepository;
@@ -98,7 +101,8 @@ public class CVProfileServiceImpl {
         }
         profile.setPositionId(request.getPositionId());
         profile.setWorkLocationId(request.getWorkLocationId());
-        profile.setImageUrl(request.getImageUrl());
+        profile.setImageAttachmentId(validateAttachment(request.getImageAttachmentId(), userId));
+        profile.setCvAttachmentId(validateAttachment(request.getCvAttachmentId(), userId));
         profile.setSummary(request.getSummary());
         profile.setEduLevel(request.getEduLevel());
         profile.setEducation(request.getEducation());
@@ -141,7 +145,8 @@ public class CVProfileServiceImpl {
         response.setUserId(profile.getUserId());
         response.setPositionId(profile.getPositionId());
         response.setWorkLocationId(profile.getWorkLocationId());
-        response.setImageUrl(profile.getImageUrl());
+        response.setImageAttachmentId(profile.getImageAttachmentId());
+        response.setCvAttachmentId(profile.getCvAttachmentId());
         response.setSummary(profile.getSummary());
         response.setEduLevel(profile.getEduLevel());
         response.setEducation(profile.getEducation());
@@ -150,5 +155,17 @@ public class CVProfileServiceImpl {
                         item.getYearsOfExperience()))
                 .toList());
         return response;
+    }
+
+    private UUID validateAttachment(UUID attachmentId, UUID userId) {
+        if (attachmentId == null) {
+            return null;
+        }
+        Attachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
+        if (!userId.equals(attachment.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Attachment does not belong to the user");
+        }
+        return attachmentId;
     }
 }

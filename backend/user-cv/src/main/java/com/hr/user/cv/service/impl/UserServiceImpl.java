@@ -156,7 +156,8 @@ public class UserServiceImpl implements UserService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work location not found or inactive");
         }
         profile.setWorkLocationId(req.getWorkLocationId());
-        profile.setImageUrl(req.getImageUrl());
+        profile.setImageAttachmentId(req.getImageAttachmentId());
+        profile.setCvAttachmentId(req.getCvAttachmentId());
         profile.setSummary(req.getSummary());
         profile.setEduLevel(req.getEduLevel());
         profile.setEducation(req.getEducation());
@@ -178,7 +179,8 @@ public class UserServiceImpl implements UserService {
     private boolean hasCvData(CreateUserRequest req) {
         return req.getPositionId() != null
                 || req.getWorkLocationId() != null
-                || req.getImageUrl() != null
+                || req.getImageAttachmentId() != null
+                || req.getCvAttachmentId() != null
                 || req.getSummary() != null
                 || req.getEduLevel() != null
                 || req.getEducation() != null
