@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     app_name: str = "ai-matching"
     environment: str = "dev"
     log_level: str = "INFO"
+    # Bật API nội bộ /ai/internal/* (nhận event qua HTTP thay Kafka) — chỉ dùng khi dev/test
+    internal_api_enabled: bool = False
 
     skills_alias_path: Path = APP_DIR / "skills" / "skills_alias.yaml"
 

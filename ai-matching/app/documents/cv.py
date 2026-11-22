@@ -58,6 +58,7 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
         "cv_id": cv.cv_id,
         "user_id": cv.user_id,
         "searchable": cv.searchable,
+        "headline": headline or None,
         "location": normalize_keyword(cv.location),
         "level": cv.level,
         "years_experience": cv.years_experience,

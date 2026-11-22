@@ -53,6 +53,7 @@ def build_job_document(job: JobSnapshot) -> IndexDocument:
     payload = {
         "job_id": job.job_id,
         "company_id": job.company_id,
+        "title": title,
         "status": job.status,
         "deadline_ts": to_utc_iso(job.deadline),
         "published_ts": to_utc_iso(job.published_at),

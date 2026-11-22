@@ -11,6 +11,8 @@ from app.embedding import Bm25Encoder, DenseEmbedder
 from app.embedding.factory import build_dense_embedder
 from app.ingestion.events import EventHandler, InMemoryProcessedEvents, RedisProcessedEvents
 from app.ingestion.indexer import Indexer
+from app.retrieval.config import get_retrieval_config
+from app.retrieval.service import Recommender
 from app.vectorstore import QdrantStore
 
 
@@ -24,6 +26,7 @@ class Container:
     sparse: Bm25Encoder
     indexer: Indexer
     events: EventHandler
+    recommender: Recommender
 
     async def close(self) -> None:
         await self.qdrant.close()
@@ -63,6 +66,7 @@ async def build_container(settings: Settings) -> Container:
         sparse=sparse,
         indexer=indexer,
         events=EventHandler(indexer, processed),
+        recommender=Recommender(store, get_retrieval_config()),
     )
 
 

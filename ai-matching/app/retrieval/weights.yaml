@@ -1,0 +1,24 @@
+# Trọng số re-scoring và ngưỡng (ARCHITECTURE.md mục 3.6).
+# Giá trị khởi tạo; sẽ tune bằng bộ đánh giá ở Phase 8, không hard-code trong code.
+weights:
+  hybrid: 0.40
+  skill: 0.30
+  level: 0.10
+  exp: 0.10
+  salary: 0.05
+  recency: 0.05
+
+# Luật cứng sau re-score
+min_skill_score: 0.3     # thiếu hơn 70% skill bắt buộc thì loại
+tau: 0.35                # điểm cuối dưới ngưỡng thì không hiển thị
+nice_to_have_bonus: 0.1  # cộng thêm theo tỉ lệ skill nice-to-have khớp
+
+# Hybrid search
+prefetch_limit: 50       # số ứng viên lấy từ mỗi nhánh dense / sparse
+fusion_limit: 50         # số kết quả sau RRF đem đi re-score
+
+# Đa dạng hóa: mỗi công ty tối đa bấy nhiêu job trong danh sách gợi ý
+max_per_company: 3
+
+# Độ mới: exp(-ngày / recency_days)
+recency_days: 30
