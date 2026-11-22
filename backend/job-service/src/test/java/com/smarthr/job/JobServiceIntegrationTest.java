@@ -259,7 +259,7 @@ class JobServiceIntegrationTest {
         body.put("workMode", "HYBRID");
         body.put("locationId", locationRepo.findAll().get(0).getId().toString());
         body.put("industryId", industryRepo.findAll().get(0).getId().toString());
-        body.put("salaryMin", 20_000_000);
+        body.put("salaryMin", 15_000_000);
         body.put("salaryMax", 40_000_000);
         body.put("minYearsExp", 2);
         body.put("deadline", OffsetDateTime.now().plusDays(30).toString());

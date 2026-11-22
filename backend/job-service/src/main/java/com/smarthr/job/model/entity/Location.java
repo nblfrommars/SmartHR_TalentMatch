@@ -18,10 +18,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/**
- * Location tree: a province (parent == null) groups its areas (districts, e.g. Hoang Mai, Cau Giay).
- * Jobs are assigned to a location; searching a province also matches its areas.
- */
 @Entity
 @Table(name = "locations")
 @NoArgsConstructor

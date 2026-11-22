@@ -84,7 +84,6 @@ from (values
 join industries p on p.name = v.parent_name
 on conflict (name) do nothing;
 
--- Seed data: provinces (parent_id is null), then their areas linked by province name.
 insert into locations (name) values
     ('Hà Nội'), ('Hồ Chí Minh'), ('Đà Nẵng'), ('Hải Phòng'), ('Cần Thơ'),
     ('Quảng Ninh'), ('Nghệ An'), ('Huế'), ('Khánh Hòa'), ('Lâm Đồng'), ('Đồng Nai')

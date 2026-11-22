@@ -13,7 +13,6 @@ import com.smarthr.job.repo.LocationRepo;
 
 import lombok.RequiredArgsConstructor;
 
-/** Read-only lookup data (industries, locations) used by job forms and search filters. */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
