@@ -1,6 +1,7 @@
 package com.hr.user.cv.entity;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import com.hr.user.cv.enums.SkillStatus;
 
@@ -34,7 +35,7 @@ public class Skill {
     private SkillStatus status = SkillStatus.PENDING;
 
     @Column(name = "created_by")
-    private Long createdBy;
+    private UUID createdBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

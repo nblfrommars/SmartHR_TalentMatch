@@ -11,5 +11,6 @@ import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 @Repository 
-public interface HRProfileRepository extends JpaRepository<HRProfile, Long> { }
+public interface HRProfileRepository extends JpaRepository<HRProfile, UUID> { }

@@ -17,5 +17,5 @@ import java.util.List;
 import java.util.Optional;
 @Repository 
 public interface PositionRepository extends JpaRepository<Position, Long> {
-    
+    List<Position> findByIsActiveTrue();
 }

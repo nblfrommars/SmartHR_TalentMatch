@@ -16,7 +16,7 @@ public class HRProfile {
 
     @Id
     @Column(name = "user_id")
-    private Long userId;
+    private UUID userId;
 
     @Column(name = "company_id")
     private UUID companyId;

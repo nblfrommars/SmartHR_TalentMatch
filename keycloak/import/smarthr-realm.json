@@ -8,7 +8,7 @@
   "roles": {
     "realm": [
       { "name": "USER", "description": "Ứng viên" },
-      { "name": "HR", "description": "HR freelance (cần admin duyệt)" },
+      { "name": "HR", "description": "HR freelance" },
       { "name": "ADMIN", "description": "Quản trị viên" }
     ]
   },
@@ -34,10 +34,25 @@
       "authorizationServicesEnabled": false,
       "serviceAccountsEnabled": false,
       "standardFlowEnabled": true,
-      "implicitFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
       "redirectUris": ["http://localhost:5173/*"],
       "webOrigins": ["http://localhost:5173"],
+      "protocolMappers": [
+        {
+          "name": "companyId",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "companyId",
+            "claim.name": "companyId",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "oauth2.device.authorization.grant.enabled": "false",

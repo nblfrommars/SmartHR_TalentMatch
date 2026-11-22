@@ -12,6 +12,7 @@ import com.hr.user.cv.entity.User;
 public interface UserMapper {
 
     @Mapping(target = "active", source = "active")
+    @Mapping(target = "companyId", ignore = true)
     UserResponse toResponse(User user);
 
     List<UserResponse> toResponses(List<User> users);

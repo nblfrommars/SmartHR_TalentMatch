@@ -6,6 +6,7 @@ import lombok.Setter;
 
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import com.hr.user.cv.enums.UserRole;
@@ -16,10 +17,9 @@ import com.hr.user.cv.enums.UserRole;
 @Table(name = "users")
 public class User{
 
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id
     @Column(name = "id")
-    private Long id;
+    private UUID id;
 
     @Column(name = "username", unique = true, nullable = false)
     private String userName;

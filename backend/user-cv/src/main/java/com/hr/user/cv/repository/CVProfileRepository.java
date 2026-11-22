@@ -15,9 +15,10 @@ import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository 
-public interface CVProfileRepository extends JpaRepository<CVProfile, Long>{
+public interface CVProfileRepository extends JpaRepository<CVProfile, UUID>{
     @Query(value = "select * from cv_profile left join user on cv_profile.user_id = user.id " + 
         "where user.is_active = 1", nativeQuery = true)
     List<CVProfile> findAllActive();

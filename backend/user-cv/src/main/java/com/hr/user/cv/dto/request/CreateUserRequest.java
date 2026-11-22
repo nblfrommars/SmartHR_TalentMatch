@@ -28,8 +28,9 @@ public class CreateUserRequest {
     // --- HR only ---
     private UUID companyId;
 
-    // --- APPLICANT only ---
+    // --- USER only ---
     private Long positionId;
+    private Long workLocationId;
     private String imageUrl;
     private String summary;
     private EduLevel eduLevel;

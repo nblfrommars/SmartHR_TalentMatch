@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+@layer components {
+  .field { @apply w-full rounded-lg border border-white/15 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-slate-400 focus:border-cyan-300; }
+  .button { @apply rounded-lg bg-cyan-400 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60; }
+}

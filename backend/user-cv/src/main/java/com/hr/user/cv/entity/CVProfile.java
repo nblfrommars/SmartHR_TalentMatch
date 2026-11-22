@@ -2,6 +2,7 @@ package com.hr.user.cv.entity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -18,10 +19,13 @@ public class CVProfile {
 
     @Id
     @Column(name = "user_id")
-    private Long userId;
+    private UUID userId;
 
     @Column(name = "position_id")
     private Long positionId;
+
+    @Column(name = "work_location_id")
+    private Long workLocationId;
 
     @Column(name = "image_url")
     private String imageUrl;

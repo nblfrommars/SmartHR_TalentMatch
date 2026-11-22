@@ -8,7 +8,11 @@ import java.util.stream.Stream;
 public enum UserRole {
     ADMIN(1, "Admin"),
     HR(2, "HR"),
-    APPLICANT(3, "Applicant");
+    USER(3, "User");
+
+    /** Compatibility alias for clients using the old domain name. */
+    @Deprecated
+    public static final UserRole APPLICANT = USER;
 
     private final int value;
     private final String label;
@@ -19,9 +23,7 @@ public enum UserRole {
     }
 
     @JsonValue
-    public int getValue() {
-        return value;
-    }
+    public String getValue() { return name(); }
 
     public String getLabel() {
         return label;
@@ -36,6 +38,9 @@ public enum UserRole {
             return fromValue(n.intValue());
         }
         String s = input.toString().trim();
+        if ("APPLICANT".equalsIgnoreCase(s)) {
+            return USER;
+        }
         return Stream.of(values())
                 .filter(r -> r.name().equalsIgnoreCase(s) || r.label.equalsIgnoreCase(s))
                 .findFirst()

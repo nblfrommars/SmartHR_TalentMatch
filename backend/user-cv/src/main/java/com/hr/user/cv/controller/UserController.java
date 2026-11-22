@@ -1,6 +1,7 @@
 package com.hr.user.cv.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,10 +10,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 import com.hr.user.cv.dto.request.CreateUserRequest;
 import com.hr.user.cv.dto.request.RegisterUserRequest;
 import com.hr.user.cv.dto.response.UserResponse;
+import com.hr.user.cv.dto.response.UserContextResponse;
 import com.hr.user.cv.mapper.UserMapper;
 import com.hr.user.cv.service.UserService;
 
@@ -42,5 +46,15 @@ public class UserController {
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse register(@Valid @RequestBody RegisterUserRequest request) {
         return userService.register(request);
+    }
+
+    @GetMapping("/me/context")
+    public UserContextResponse getMyContext(@AuthenticationPrincipal Jwt jwt) {
+        try {
+            return userService.getContext(UUID.fromString(jwt.getSubject()));
+        } catch (IllegalArgumentException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "JWT subject must be a UUID", ex);
+        }
     }
 }

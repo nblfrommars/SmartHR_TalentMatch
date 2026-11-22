@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.hr.user.cv.repository.UserRepository;
 import com.hr.user.cv.repository.CVProfileRepository;
 import com.hr.user.cv.repository.HRProfileRepository;
+import com.hr.user.cv.repository.LocationRepository;
 import com.hr.user.cv.repository.SkillRepository;
 import com.hr.user.cv.entity.User;
 import com.hr.user.cv.entity.HRProfile;
@@ -25,6 +27,7 @@ import com.hr.user.cv.dto.request.CreateUserRequest;
 import com.hr.user.cv.dto.request.RegisterUserRequest;
 import com.hr.user.cv.dto.request.CVSkillRequest;
 import com.hr.user.cv.dto.response.UserResponse;
+import com.hr.user.cv.dto.response.UserContextResponse;
 import com.hr.user.cv.mapper.UserMapper;
 import com.hr.user.cv.integration.KeycloakAdminClient;
 
@@ -37,6 +40,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final CVProfileRepository cvProfileRepository;
     private final HRProfileRepository hrProfileRepository;
+    private final LocationRepository locationRepository;
     private final SkillRepository skillRepository;
     private final UserMapper userMapper;
     private final KeycloakAdminClient keycloakAdminClient;
@@ -50,8 +54,8 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse save(CreateUserRequest req) {
-        User user = createUser(req);
-        return userMapper.toResponse(user);
+        User user = createUser(req, UUID.randomUUID());
+        return toResponse(user);
     }
 
     @Override
@@ -62,13 +66,15 @@ public class UserServiceImpl implements UserService {
         String keycloakUserId;
         try {
             keycloakUserId = keycloakAdminClient.createUser(
-                    req.getUserName().trim(), req.getEmail().trim(), req.getFullName(), req.getPassword(), keycloakRole);
+                    req.getUserName().trim(), req.getEmail().trim(), req.getFullName(), req.getPassword(),
+                    keycloakRole, req.getCompanyId());
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to create user in Keycloak", ex);
         }
 
         try {
-            return userMapper.toResponse(createUser(req));
+            UUID userId = UUID.fromString(keycloakUserId);
+            return toResponse(createUser(req, userId));
         } catch (RuntimeException ex) {
             try {
                 keycloakAdminClient.deleteUser(keycloakUserId);
@@ -89,10 +95,11 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-    private User createUser(CreateUserRequest req) {
+    private User createUser(CreateUserRequest req, UUID userId) {
         validate(req);
 
         User user = new User();
+        user.setId(userId);
         user.setUserName(req.getUserName().trim());
         user.setEmail(req.getEmail().trim());
         user.setFullName(req.getFullName());
@@ -104,23 +111,24 @@ public class UserServiceImpl implements UserService {
 
         switch (req.getRole()) {
             case HR -> createHRProfile(user.getId(), req);
-            case APPLICANT -> createCVProfile(user.getId(), req);
+            case USER -> {
+                if (hasCvData(req)) {
+                    createCVProfile(user.getId(), req);
+                }
+            }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not allowed");
         }
         return user;
     }
 
     private void validate(CreateUserRequest req) {
-        if (req.getRole() != UserRole.HR && req.getRole() != UserRole.APPLICANT) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role must be HR or APPLICANT");
+        if (req.getRole() != UserRole.HR && req.getRole() != UserRole.USER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role must be HR or USER");
         }
         if (userRepository.existsByUserName(req.getUserName().trim())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
         }
         if (req.getRole() == UserRole.HR) {
-            if (req.getCompanyId() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "companyId is required for HR");
-            }
             if (req.getSkills() != null && !req.getSkills().isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "HR cannot have skills");
             }
@@ -129,18 +137,25 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-    private void createHRProfile(Long userId, CreateUserRequest req) {
+    private void createHRProfile(UUID userId, CreateUserRequest req) {
         HRProfile hr = new HRProfile();
         hr.setUserId(userId);
         hr.setCompanyId(req.getCompanyId());
-        hr.setVerified(false);     // luôn false, admin duyệt sau
+        hr.setVerified(true);
         hrProfileRepository.save(hr);
     }
 
-    private void createCVProfile(Long userId, CreateUserRequest req) {
+    private void createCVProfile(UUID userId, CreateUserRequest req) {
         CVProfile profile = new CVProfile();
         profile.setUserId(userId);
         profile.setPositionId(req.getPositionId());
+        if (req.getWorkLocationId() != null
+                && !locationRepository.findById(req.getWorkLocationId())
+                        .map(location -> location.isActive())
+                        .orElse(false)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work location not found or inactive");
+        }
+        profile.setWorkLocationId(req.getWorkLocationId());
         profile.setImageUrl(req.getImageUrl());
         profile.setSummary(req.getSummary());
         profile.setEduLevel(req.getEduLevel());
@@ -160,7 +175,17 @@ public class UserServiceImpl implements UserService {
         cvProfileRepository.save(profile);
     }
 
-    private Skill resolveSkill(CVSkillRequest item, Long userId) {
+    private boolean hasCvData(CreateUserRequest req) {
+        return req.getPositionId() != null
+                || req.getWorkLocationId() != null
+                || req.getImageUrl() != null
+                || req.getSummary() != null
+                || req.getEduLevel() != null
+                || req.getEducation() != null
+                || (req.getSkills() != null && !req.getSkills().isEmpty());
+    }
+
+    private Skill resolveSkill(CVSkillRequest item, UUID userId) {
         if (item.getSkillId() != null) {
             return skillRepository.findById(item.getSkillId())
                     .orElseThrow(() -> new ResponseStatusException(
@@ -178,12 +203,27 @@ public class UserServiceImpl implements UserService {
                 .orElseGet(() -> createPendingSkill(title.trim(), normalizedTitle, userId));
     }
 
-    private Skill createPendingSkill(String title, String normalizedTitle, Long userId) {
+    private Skill createPendingSkill(String title, String normalizedTitle, UUID userId) {
         Skill skill = new Skill();
         skill.setTitle(title);
         skill.setNormalizedTitle(normalizedTitle);
         skill.setStatus(SkillStatus.PENDING);
         skill.setCreatedBy(userId);
         return skillRepository.save(skill);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserContextResponse getContext(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        UUID companyId = hrProfileRepository.findById(userId).map(HRProfile::getCompanyId).orElse(null);
+        return new UserContextResponse(user.getId(), user.getRole(), companyId, user.isActive() && !user.isDeleted());
+    }
+
+    private UserResponse toResponse(User user) {
+        UserResponse response = userMapper.toResponse(user);
+        hrProfileRepository.findById(user.getId()).map(HRProfile::getCompanyId).ifPresent(response::setCompanyId);
+        return response;
     }
 }

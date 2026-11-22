@@ -36,6 +36,5 @@ keycloak:
     client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:smarthr-admin-secret}
 
 app:
-  jwt:
-    secret: dev-only-secret-change-me-at-least-32-bytes-long-0123456789
-    access-token-expiration-ms: 3600000
+  cors:
+    allowed-origins: http://localhost:5173
