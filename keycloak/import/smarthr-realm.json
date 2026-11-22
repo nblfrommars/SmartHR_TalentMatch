@@ -1,0 +1,92 @@
+{
+  "realm": "smarthr",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "none",
+  "roles": {
+    "realm": [
+      { "name": "USER", "description": "Ứng viên" },
+      { "name": "HR", "description": "HR freelance (cần admin duyệt)" },
+      { "name": "ADMIN", "description": "Quản trị viên" }
+    ]
+  },
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
+          ]
+        }
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "smarthr-frontend",
+      "name": "SmartHR Frontend (React/Vite)",
+      "enabled": true,
+      "publicClient": true,
+      "authorizationServicesEnabled": false,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "dpop.bound.access.tokens": "false",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      }
+    },
+    {
+      "clientId": "smarthr-backend",
+      "name": "SmartHR Backend Services",
+      "enabled": true,
+      "bearerOnly": true
+    },
+    {
+      "clientId": "smarthr-admin-service",
+      "name": "Service gọi Keycloak Admin API",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "smarthr-admin-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-smarthr-admin-service",
+      "enabled": true,
+      "serviceAccountClientId": "smarthr-admin-service",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-realm"
+        ]
+      }
+    },
+    {
+      "username": "admin@smarthr.local",
+      "email": "admin@smarthr.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Admin",
+      "lastName": "SmartHR",
+      "credentials": [
+        { "type": "password", "value": "admin123", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    }
+  ]
+}
