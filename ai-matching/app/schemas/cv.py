@@ -23,6 +23,15 @@ class CvExperience(CamelModel):
     summary: str | None = None
 
 
+class CvProject(CamelModel):
+    """Dự án cá nhân / đồ án / dự án ở trường: phần quan trọng nhất trong CV sinh viên."""
+
+    name: str | None = None
+    role: str | None = None
+    technologies: list[str] = Field(default_factory=list)
+    summary: str | None = None
+
+
 class CvEducation(CamelModel):
     school: str | None = None
     degree: str | None = None
@@ -49,6 +58,7 @@ class CvContent(CamelModel):
     level: Level | None = None
     skills: list[CvSkill] = Field(default_factory=list)
     experiences: list[CvExperience] = Field(default_factory=list)
+    projects: list[CvProject] = Field(default_factory=list)
     education: list[CvEducation] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
     languages: list[CvLanguage] = Field(default_factory=list)

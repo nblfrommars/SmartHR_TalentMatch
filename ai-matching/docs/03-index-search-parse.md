@@ -2,7 +2,7 @@
 
 > Branch: `Dung_Branch` · Ngày: 2026-11-22
 > Phạm vi: các phần **không phải chờ nhóm khác** của Phase 4 và Phase 5 trong [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
-> Kết quả: 146 test pass, ruff sạch, đã chạy thử trên server uvicorn thật (Qdrant chạy trong RAM).
+> Kết quả: 156 test pass, ruff sạch, đã chạy thử trên server uvicorn thật (Qdrant chạy trong RAM).
 
 ---
 
@@ -167,7 +167,40 @@ Có test đi trọn quy trình: PDF → parse → lưu CV → index → gợi ý
 
 ---
 
-## 7. Cấu hình mới
+## 7. Bổ sung cho CV sinh viên / mới ra trường
+
+CV sinh viên thường ít skill, không có kinh nghiệm đi làm, chủ yếu là đồ án. Ba thay đổi:
+
+**a. Mục `projects` trong CV** (`CvProject`: `name`, `role`, `technologies`, `summary`)
+- LLM parse CV được dặn trích dự án / đồ án (không lấy link GitHub, demo).
+- Đưa vào **dense** (khối `Projects:`), **sparse** (token công nghệ) và payload.
+- **Công nghệ dùng trong dự án được tính như skill**: payload `skills` = skill tự khai ∪ công nghệ dự án (có thêm `project_skills` để biết nguồn). Ví dụ CV chỉ khai `Java` nhưng có đồ án dùng Spring Boot, PostgreSQL, Kafka: job Junior Java từ 1/4 lên 4/4 kỹ năng bắt buộc.
+
+**b. Chuyên ngành vào nhánh sparse**
+`Công nghệ thông tin` được tách từ thành `công_nghệ thông_tin` và thêm vào sparse text, nên job ghi "ưu tiên sinh viên ngành Công nghệ thông tin" khớp được theo từ khóa (trước đây chuyên ngành chỉ có ở dense).
+
+**c. Dự phòng cho CV sơ sài** (ARCHITECTURE.md mục 5, điểm 16)
+- CV có **ít hơn 3 skill** (tính cả công nghệ dự án; `thin_cv_min_skills` trong `weights.yaml`) là CV sơ sài.
+- Nếu gợi ý chặt chưa đủ `limit` job, bù thêm theo thứ tự: job **khớp yếu hơn** (không đạt `s_skill ≥ 0.3` hoặc `τ`), rồi **job mới đăng nhất** (20 job, `fallback_newest_limit`), mỗi nhóm xếp theo điểm.
+- Job bù có `isFallback: true` và luôn đứng sau job khớp chặt. Response có `cvIsThin: true` và `notice` nhắc User bổ sung kỹ năng, dự án.
+- **Vẫn giữ nguyên các ràng buộc cứng:** hard filter (hết hạn, đã đóng, đã apply, filter người dùng) và skill `must_have`, nên constraint compliance vẫn 100% (có test riêng cho nhánh bù).
+- CV bình thường (từ 3 skill trở lên) **không bao giờ** nhận job bù.
+
+Response mới:
+
+```json
+{
+  "cvId": "thin",
+  "cvIsThin": true,
+  "notice": "CV của bạn còn ít thông tin về kỹ năng. Hãy bổ sung kỹ năng, dự án hoặc đồ án đã làm để nhận gợi ý chính xác hơn.",
+  "items": [
+    {"jobId": "j-intern", "score": 0.85, "isFallback": false, "...": "..."},
+    {"jobId": "j-junior", "score": 0.273, "isFallback": true, "...": "..."}
+  ]
+}
+```
+
+## 8. Cấu hình mới
 
 | Biến | Mặc định | Ý nghĩa |
 |------|----------|---------|
@@ -187,7 +220,7 @@ Trọng số và ngưỡng gợi ý nằm ở `app/retrieval/weights.yaml` (tổ
 
 ---
 
-## 8. Chạy thử local (không cần Docker, không cần OpenAI)
+## 9. Chạy thử local (không cần Docker, không cần OpenAI)
 
 ```bash
 cd ai-matching
@@ -201,7 +234,7 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
 
 ---
 
-## 9. Còn lại
+## 10. Còn lại
 
 **Làm được ngay khi có OpenAI API key:**
 - [ ] Chạy thử parse CV và embedding với OpenAI thật, kiểm tra chất lượng trích xuất trên CV tiếng Việt.
@@ -213,6 +246,9 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
 - [ ] Script `reindex` từ Postgres: chờ job-service / candidate-service có DB.
 - [ ] Chạy với Qdrant / Redis server thật: chờ `docker-compose`. Payload index chỉ có tác dụng trên server thật.
 - [ ] `POST /ai/feedback`: cần chốt nơi lưu feedback (Phase 8).
+
+**Để sau (đã thống nhất):**
+- [ ] Thêm `INTERNSHIP` vào `JobType` (nằm trong hợp đồng event, cần nhóm backend đồng ý).
 
 **Cần quyết định:**
 - [ ] OCR cho PDF scan: phải cài `tesseract-ocr` + `tesseract-ocr-vie` vào image Docker (image to thêm khoảng 100MB). Hiện trả 422 `SCANNED_PDF` và nhắc User điền form.

@@ -342,6 +342,7 @@ flowchart TD
   "level": "MIDDLE",
   "skills": [{"name": "spring boot", "years": 3}, {"name": "postgresql", "years": 2}],
   "experiences": [{"company": "...", "title": "...", "from": "2022-01", "to": "present", "summary": "..."}],
+  "projects": [{"name": "Website bán sách", "role": "Backend", "technologies": ["spring boot", "postgresql"], "summary": "..."}],
   "education": [{"school": "...", "degree": "Bachelor", "major": "Computer Science", "year": 2023}],
   "certifications": ["AWS SAA"],
   "languages": [{"name": "English", "level": "IELTS 6.5"}],

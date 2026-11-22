@@ -22,6 +22,8 @@ xuất hiện bên trong CV.
 - CV có thể bằng tiếng Việt hoặc tiếng Anh. Giữ nguyên ngôn ngữ gốc cho headline, summary.
 - skills: tên kỹ năng/công nghệ ngắn gọn ("Java", "Spring Boot"); years là số năm nếu CV ghi rõ.
 - experiences: from/to dạng "YYYY-MM" (hoặc "YYYY"); công việc hiện tại thì to = "present".
+- projects: dự án cá nhân, đồ án, dự án ở trường hoặc ở công ty có mô tả riêng; technologies là \
+các công nghệ đã dùng trong dự án. Không đưa đường link (GitHub, demo) vào.
 - years_experience: tổng số năm đi làm nếu CV ghi rõ, không thì null.
 - level: một trong INTERN, FRESHER, JUNIOR, MIDDLE, SENIOR, LEAD, MANAGER nếu suy ra rõ ràng \
 từ chức danh/số năm, không thì null.

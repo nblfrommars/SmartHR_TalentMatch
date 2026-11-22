@@ -1,6 +1,8 @@
 """CV snapshot -> IndexDocument cho collection "candidates" (ARCHITECTURE.md mục 3.5, 3.6).
 
 dense_text / sparse_text của CV cũng chính là query khi gợi ý job cho User (Phase 5).
+Công nghệ dùng trong dự án được tính như skill (sinh viên thường chỉ chứng minh kỹ năng qua đồ án),
+chuyên ngành được đưa vào cả sparse để khớp từ khóa kiểu "sinh viên ngành CNTT".
 Không dùng full_name, email, phone: CvSnapshot không có các field này, và mọi văn bản tự do
 đều đi qua clean_text() để loại email/SĐT/URL lỡ nằm trong phần mô tả.
 """
@@ -17,7 +19,7 @@ from app.documents.base import (
     skill_tokens,
     to_utc_iso,
 )
-from app.schemas import CvEducation, CvExperience, CvLanguage, CvSnapshot
+from app.schemas import CvEducation, CvExperience, CvLanguage, CvProject, CvSnapshot
 from app.skills import get_normalizer
 from app.text import clean_text, normalize_keyword, truncate
 
@@ -26,12 +28,17 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
     settings = get_settings()
     normalizer = get_normalizer()
 
-    skills = normalizer.normalize_many(s.name for s in cv.skills)
+    declared_skills = normalizer.normalize_many(s.name for s in cv.skills)
+    project_skills = normalizer.normalize_many(t for p in cv.projects for t in p.technologies)
+    skills = list(dict.fromkeys([*declared_skills, *project_skills]))
+    majors = [clean_text(e.major) for e in cv.education if e.major]
     certifications = normalizer.normalize_many(cv.certifications)
     headline = clean_text(cv.headline)
 
     experience_lines = [line for line in (_experience_line(e) for e in cv.experiences) if line]
     experience_block = truncate("\n".join(experience_lines), settings.document_max_chars)
+    project_lines = [line for line in (_project_line(p) for p in cv.projects) if line]
+    project_block = truncate("\n".join(project_lines), settings.document_max_chars)
 
     dense_text = compact_lines(
         [
@@ -44,6 +51,7 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
             labeled_line("Certifications", ", ".join(certifications)),
             labeled_line("Languages", ", ".join(_language_label(lang) for lang in cv.languages)),
             f"Experience:\n{experience_block}" if experience_block else None,
+            f"Projects:\n{project_block}" if project_block else None,
             labeled_line("Education", "; ".join(filter(None, map(_education_label, cv.education)))),
         ]
     )
@@ -52,6 +60,7 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
         skill_tokens(skills),
         skill_tokens(certifications),
         segment_all([headline]),
+        segment_all(majors),
     )
 
     payload = {
@@ -62,7 +71,9 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
         "location": normalize_keyword(cv.location),
         "level": cv.level,
         "years_experience": cv.years_experience,
+        # skills = skill tự khai + công nghệ trong dự án; dùng cho s_skill và filter
         "skills": skills,
+        "project_skills": project_skills,
         "certifications": certifications,
         "desired_salary_min": cv.desired.salary_min,
         "desired_job_type": cv.desired.job_type,
@@ -92,6 +103,17 @@ def _experience_line(exp: CvExperience) -> str | None:
         head = f"{head} ({period})" if head else period
     summary = clean_text(exp.summary)
     line = ": ".join(filter(None, [head, summary]))
+    return f"- {line}" if line else None
+
+
+def _project_line(project: CvProject) -> str | None:
+    name = clean_text(project.name)
+    role = clean_text(project.role)
+    head = f"{name} ({role})" if name and role else name or role
+    tech = ", ".join(get_normalizer().normalize_many(project.technologies))
+    if tech:
+        head = f"{head} [{tech}]" if head else f"[{tech}]"
+    line = ": ".join(filter(None, [head, clean_text(project.summary)]))
     return f"- {line}" if line else None
 
 

@@ -8,12 +8,14 @@ OpenAI: nhanh, rẻ, và cùng một cách encode với lúc index.
   3. Prefetch dense top-N + sparse top-N, fusion RRF
   4. Re-score theo nghiệp vụ + luật cứng (must_have, s_skill, tau)
   5. Đa dạng hóa (tối đa N job/công ty) và cắt top-K
-  6. Giải thích (template; LLM ở bước sau)
+  6. CV sơ sài mà chưa đủ K job: bù job khớp yếu hơn, rồi job mới đăng (vẫn giữ hard filter
+     và must_have, nên constraint compliance không đổi)
+  7. Giải thích (template; LLM ở bước sau)
 """
 
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -36,6 +38,15 @@ class Match:
     breakdown: Breakdown
     explanation: Explanation
     payload: dict[str, Any]
+    # True: job được bù vào cho CV sơ sài, không đạt ngưỡng gợi ý thông thường
+    is_fallback: bool = False
+
+
+@dataclass(frozen=True)
+class JobRecommendations:
+    matches: list[Match]
+    # CV ít kỹ năng: FE nên nhắc User bổ sung CV
+    cv_is_thin: bool
 
 
 class Recommender:
@@ -49,28 +60,73 @@ class Recommender:
         job_filter: qm.Filter,
         limit: int = 10,
         now: datetime | None = None,
-    ) -> list[Match]:
+    ) -> JobRecommendations:
         now = now or datetime.now(UTC)
         cv = await self._source(Kind.CV, cv_id)
+        cv_is_thin = len(cv.payload.get("skills") or []) < self.config.thin_cv_min_skills
         hits = await self._hybrid(Kind.JOB, cv, job_filter)
 
-        matches = []
+        strict: list[Match] = []
+        relaxed: list[Match] = []
         for hit, hybrid in zip(hits, min_max([h.score for h in hits]), strict=True):
-            job = hit.payload or {}
-            breakdown, skills = score_pair(
-                job, cv.payload, hybrid, now, self.config, recency_ts=job.get("published_ts")
-            )
-            if passes_hard_rules(breakdown, skills, self.config):
-                matches.append(
-                    Match(
-                        ref_id=job["job_id"],
-                        score=breakdown.final(self.config),
-                        breakdown=breakdown,
-                        explanation=explain_for_candidate(skills, breakdown),
-                        payload=job,
-                    )
-                )
-        return self._diversify(_ranked(matches), limit)
+            match, passed = self._score_job(hit.payload or {}, cv.payload, hybrid, now)
+            if passed:
+                strict.append(match)
+            elif cv_is_thin and match is not None:
+                relaxed.append(match)
+
+        result = self._diversify(_ranked(strict), limit)
+        if cv_is_thin and len(result) < limit:
+            seen = {m.ref_id for m in strict} | {m.ref_id for m in relaxed}
+            newest = await self._newest_jobs(cv.payload, job_filter, seen, now)
+            # Thứ tự ưu tiên: khớp chặt -> khớp yếu hơn -> job mới đăng
+            result = self._diversify([*result, *_ranked(relaxed), *_ranked(newest)], limit)
+        return JobRecommendations(matches=result, cv_is_thin=cv_is_thin)
+
+    def _score_job(
+        self, job: dict[str, Any], cv: dict[str, Any], hybrid: float, now: datetime
+    ) -> tuple[Match | None, bool]:
+        """Trả (match, qua_luật_cứng). match = None nếu thiếu skill must_have: không bao giờ bù."""
+        breakdown, skills = score_pair(
+            job, cv, hybrid, now, self.config, recency_ts=job.get("published_ts")
+        )
+        passed = passes_hard_rules(breakdown, skills, self.config)
+        if not passed and skills.missing_must_have:
+            return None, False
+        return (
+            Match(
+                ref_id=job["job_id"],
+                score=breakdown.final(self.config),
+                breakdown=breakdown,
+                explanation=explain_for_candidate(skills, breakdown),
+                payload=job,
+                is_fallback=not passed,
+            ),
+            passed,
+        )
+
+    async def _newest_jobs(
+        self, cv: dict[str, Any], job_filter: qm.Filter, seen: set[str], now: datetime
+    ) -> list[Match]:
+        """Job mới đăng nhất thỏa hard filter (cùng filter với hybrid search)."""
+        if self.config.fallback_newest_limit == 0:
+            return []
+        points, _ = await self.store.client.scroll(
+            self.store.collection(Kind.JOB),
+            scroll_filter=job_filter,
+            order_by=qm.OrderBy(key="published_ts", direction=qm.Direction.DESC),
+            limit=self.config.fallback_newest_limit,
+            with_payload=True,
+        )
+        matches = []
+        for point in points:
+            job = point.payload or {}
+            if job.get("job_id") in seen:
+                continue
+            match, _ = self._score_job(job, cv, hybrid=0.0, now=now)
+            if match is not None:
+                matches.append(replace(match, is_fallback=True))
+        return matches
 
     async def search_candidates(
         self,

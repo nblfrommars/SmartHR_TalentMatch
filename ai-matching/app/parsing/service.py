@@ -65,6 +65,8 @@ class CvParser:
         data = extracted.model_dump()
         data["skills"] = self._merge_skills(extracted.skills)
         data["certifications"] = self.normalizer.normalize_many(extracted.certifications)
+        for project in data["projects"]:
+            project["technologies"] = self.normalizer.normalize_many(project["technologies"])
         if data["years_experience"] is None:
             data["years_experience"] = total_years(extracted.experiences, today)
         data["email"] = emails[0] if emails else None

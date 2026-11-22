@@ -22,3 +22,10 @@ max_per_company: 3
 
 # Độ mới: exp(-ngày / recency_days)
 recency_days: 30
+
+# Dự phòng cho CV sơ sài (sinh viên, mới ra trường): ARCHITECTURE.md mục 5, điểm 16.
+# CV có ít hơn thin_cv_min_skills skill (tính cả công nghệ trong dự án) mà gợi ý chặt không đủ
+# `limit` job thì bù thêm job khớp yếu hơn (vẫn giữ must_have và hard filter), rồi đến job mới
+# đăng nhất. Job bù được đánh dấu isFallback, response kèm lời nhắc bổ sung CV.
+thin_cv_min_skills: 3
+fallback_newest_limit: 20

@@ -41,6 +41,7 @@ class ExplanationOut(CamelModel):
 class JobRecommendation(CamelModel):
     job_id: str
     score: float
+    is_fallback: bool
     breakdown: ScoreBreakdown
     explanation: ExplanationOut
     job: dict[str, Any]
@@ -56,7 +57,15 @@ class CandidateMatch(CamelModel):
 
 class JobRecommendations(CamelModel):
     cv_id: str
+    cv_is_thin: bool
+    notice: str | None = None
     items: list[JobRecommendation]
+
+
+THIN_CV_NOTICE = (
+    "CV của bạn còn ít thông tin về kỹ năng. Hãy bổ sung kỹ năng, dự án hoặc đồ án đã làm "
+    "để nhận gợi ý chính xác hơn."
+)
 
 
 class CandidateMatches(CamelModel):
@@ -96,20 +105,23 @@ async def recommend_jobs(
         exclude_job_ids=exclude_job_ids,
     )
     try:
-        matches = await container.recommender.recommend_jobs(cv_id, flt, limit=limit)
+        result = await container.recommender.recommend_jobs(cv_id, flt, limit=limit)
     except NotIndexedError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return JobRecommendations(
         cv_id=cv_id,
+        cv_is_thin=result.cv_is_thin,
+        notice=THIN_CV_NOTICE if result.cv_is_thin else None,
         items=[
             JobRecommendation(
                 job_id=m.ref_id,
                 score=round(m.score, 4),
+                is_fallback=m.is_fallback,
                 breakdown=_breakdown(m),
                 explanation=_explanation(m.explanation),
                 job=m.payload,
             )
-            for m in matches
+            for m in result.matches
         ],
     )
 

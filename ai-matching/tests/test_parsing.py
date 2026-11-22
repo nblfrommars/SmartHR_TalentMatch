@@ -291,3 +291,12 @@ async def test_parsed_cv_can_be_indexed_and_recommended(api):
     stored = await container.store.get(Kind.CV, "cv-pdf")
     for pii in ["an.nguyen@gmail.com", "0912 345 678", "Nguyen Van An"]:
         assert pii not in str(stored.payload)
+
+
+async def test_parser_normalizes_project_technologies():
+    extracted = ExtractedCv.model_validate(
+        {"projects": [{"name": "Đồ án", "technologies": ["ReactJS", "NodeJS", "react.js"]}]}
+    )
+    result = await make_parser(FakeExtractor(extracted)).parse(make_pdf(CV_LINES))
+
+    assert result.cv.projects[0].technologies == ["react", "node.js"]

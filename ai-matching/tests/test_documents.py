@@ -186,6 +186,8 @@ def test_cv_sparse_text_matches_architecture_example():
         "lập_trình_viên",
         "java",
         "backend",
+        "computer",  # chuyên ngành "Computer Science"
+        "science",
     ]
 
 

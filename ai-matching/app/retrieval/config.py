@@ -32,6 +32,8 @@ class RetrievalConfig(BaseModel):
     fusion_limit: int = Field(gt=0)
     max_per_company: int = Field(gt=0)
     recency_days: float = Field(gt=0)
+    thin_cv_min_skills: int = Field(ge=0)
+    fallback_newest_limit: int = Field(ge=0)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "RetrievalConfig":

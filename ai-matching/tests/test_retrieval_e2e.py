@@ -79,10 +79,15 @@ async def recommend(client, **params) -> list[dict]:
 
 
 async def test_recommendation_response_shape(setup):
-    items = await recommend(setup)
+    response = await setup.get("/ai/recommendations/jobs", params={"cvId": "cv-1"})
+    body = response.json()
+    assert body["cvIsThin"] is False
+    assert body["notice"] is None
+    items = body["items"]
     top = items[0]
 
-    assert set(top) == {"jobId", "score", "breakdown", "explanation", "job"}
+    assert set(top) == {"jobId", "score", "isFallback", "breakdown", "explanation", "job"}
+    assert not any(i["isFallback"] for i in items)
     assert set(top["breakdown"]) == {"hybrid", "skill", "level", "exp", "salary", "recency"}
     assert top["explanation"]["matchSummary"].startswith("Bạn có 4/4 kỹ năng bắt buộc")
     assert top["job"]["title"]
