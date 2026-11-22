@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,11 +23,23 @@ class Settings(BaseSettings):
     # ~1.500 token (ước lượng ~4 ký tự/token), giới hạn phần mô tả job / tóm tắt kinh nghiệm
     document_max_chars: int = 6000
 
-    # Dùng từ Phase 4 trở đi (Qdrant, Kafka, Redis, OpenAI)
-    qdrant_url: str = "http://localhost:6333"
-    kafka_bootstrap_servers: str = "localhost:9092"
-    redis_url: str = "redis://localhost:6379/0"
+    # Dense embedding: "openai" khi chạy thật; "hashing" cho dev/test (không cần API key)
+    embedding_provider: Literal["openai", "hashing"] = "openai"
     openai_api_key: str | None = None
+    openai_embedding_model: str = "text-embedding-3-small"
+    openai_timeout_seconds: float = 15.0
+    embedding_dimension: int = 1536
+    # Cache embedding: "redis" khi chạy thật; "memory" cho dev; "none" để tắt
+    embedding_cache: Literal["redis", "memory", "none"] = "memory"
+
+    # Qdrant: URL server, hoặc ":memory:" để chạy trong RAM (dev/test, mất dữ liệu khi tắt)
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    qdrant_jobs_collection: str = "jobs"
+    qdrant_candidates_collection: str = "candidates"
+
+    redis_url: str = "redis://localhost:6379/0"
+    kafka_bootstrap_servers: str = "localhost:9092"
 
 
 @lru_cache
