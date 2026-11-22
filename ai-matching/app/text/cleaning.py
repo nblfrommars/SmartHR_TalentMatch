@@ -10,6 +10,9 @@ _ANY_TAG = re.compile(r"<[^>]+>")
 # PII không được gửi sang OpenAI và không lưu vào Qdrant (ARCHITECTURE.md mục 3.5, 3.12)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _URL = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
+# Link trần không có http/www: "linkedin.com/in/ten", "github.com/ten" (bắt buộc có "/" để
+# không bắt nhầm "node.js", "React.js")
+_BARE_URL = re.compile(r"\b(?:[\w-]+\.)+(?:com|net|org|io|me|dev|vn|co)\b/\S*", re.IGNORECASE)
 # Số điện thoại Việt Nam: bắt đầu bằng 0 hoặc +84, 9-10 chữ số sau đó, cho phép dấu cách/chấm/gạch
 _PHONE = re.compile(r"(?<![\w+])(?:\+84|0)(?:[\s.-]?\d){8,10}(?!\d)")
 
@@ -29,9 +32,16 @@ def strip_html(text: str) -> str:
 
 
 def scrub_pii(text: str) -> str:
-    for pattern in (_EMAIL, _URL, _PHONE):
+    for pattern in (_EMAIL, _URL, _BARE_URL, _PHONE):
         text = pattern.sub(" ", text)
     return text
+
+
+def find_contacts(text: str) -> tuple[list[str], list[str]]:
+    """Tìm email và SĐT (giữ thứ tự, bỏ trùng) để tách riêng trước khi gửi văn bản cho LLM."""
+    emails = list(dict.fromkeys(m.group(0) for m in _EMAIL.finditer(text)))
+    phones = list(dict.fromkeys(" ".join(m.group(0).split()) for m in _PHONE.finditer(text)))
+    return emails, phones
 
 
 def normalize_whitespace(text: str) -> str:

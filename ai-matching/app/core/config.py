@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_timeout_seconds: float = 15.0
     embedding_dimension: int = 1536
+    # Parse CV: model LLM trích xuất JSON và giới hạn file
+    openai_chat_model: str = "gpt-4o-mini"
+    cv_max_bytes: int = 5 * 1024 * 1024
+    cv_max_pages: int = 10
+    cv_max_chars: int = 24_000
     # Cache embedding: "redis" khi chạy thật; "memory" cho dev; "none" để tắt
     embedding_cache: Literal["redis", "memory", "none"] = "memory"
 

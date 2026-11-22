@@ -25,6 +25,9 @@ def test_strip_html_keeps_block_breaks_and_unescapes():
         "024 3826 1234",
         "https://linkedin.com/in/nguyen-van-a",
         "www.facebook.com/nguyenvana",
+        "linkedin.com/in/nguyen-van-a",
+        "github.com/nguyenvana",
+        "topcv.vn/xem-cv/abc123",
     ],
 )
 def test_scrub_pii_removes_contacts(pii):
@@ -33,7 +36,17 @@ def test_scrub_pii_removes_contacts(pii):
 
 @pytest.mark.parametrize(
     "safe",
-    ["lương 20000000 VND", "2020-2023", "IELTS 6.5", "3.5 năm", "node.js", "+5 năm kinh nghiệm"],
+    [
+        "lương 20000000 VND",
+        "2020-2023",
+        "IELTS 6.5",
+        "3.5 năm",
+        "node.js",
+        "+5 năm kinh nghiệm",
+        "React.js/Vue.js",
+        "ASP.NET Core",
+        "CI/CD",
+    ],
 )
 def test_scrub_pii_keeps_normal_numbers(safe):
     assert scrub_pii(safe) == safe

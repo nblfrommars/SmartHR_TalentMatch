@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
-from app.api import health, internal, recommendations
+from app.api import cv, health, internal, recommendations
 from app.core.config import get_settings
 from app.core.container import build_container
 from app.core.logging import setup_logging
@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health.router)
     app.include_router(recommendations.router)
+    app.include_router(cv.router)
     if settings.internal_api_enabled:
         app.include_router(internal.router)
 
