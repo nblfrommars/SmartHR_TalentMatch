@@ -15,12 +15,17 @@ import com.hr.user.cv.dto.request.CVSkillRequest;
 import com.hr.user.cv.dto.request.CreateCVProfileRequest;
 import com.hr.user.cv.dto.response.CVDetailResponse;
 import com.hr.user.cv.dto.response.CVSkillResponse;
+import com.hr.user.cv.dto.response.AttachmentUrlResponse;
 import com.hr.user.cv.entity.CVProfile;
 import com.hr.user.cv.entity.Attachment;
 import com.hr.user.cv.entity.Skill;
 import com.hr.user.cv.entity.User;
 import com.hr.user.cv.enums.SkillStatus;
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.event.CVProfileEventPublisher;
+import com.hr.user.cv.event.CVProfileEventType;
+import com.hr.user.cv.event.CVProfileEventData;
+import com.hr.user.cv.service.AttachmentService;
 import com.hr.user.cv.repository.CVProfileRepository;
 import com.hr.user.cv.repository.AttachmentRepository;
 import com.hr.user.cv.repository.LocationRepository;
@@ -40,6 +45,8 @@ public class CVProfileServiceImpl {
     private final PositionRepository positionRepository;
     private final LocationRepository locationRepository;
     private final SkillRepository skillRepository;
+    private final CVProfileEventPublisher eventPublisher;
+    private final AttachmentService attachmentService;
 
     @Transactional(readOnly = true)
     public CVDetailResponse get(UUID userId) {
@@ -55,7 +62,10 @@ public class CVProfileServiceImpl {
         CVProfile profile = new CVProfile();
         profile.setUserId(userId);
         apply(profile, request, userId);
-        return toResponse(cvProfileRepository.save(profile));
+        CVProfile saved = cvProfileRepository.save(profile);
+        CVDetailResponse response = toResponse(saved);
+        eventPublisher.publish(CVProfileEventType.CREATED, userId, toEventData(response));
+        return response;
     }
 
     @Transactional
@@ -63,7 +73,29 @@ public class CVProfileServiceImpl {
         requireApplicant(userId);
         CVProfile profile = findOwnedUserCv(userId);
         apply(profile, request, userId);
-        return toResponse(cvProfileRepository.save(profile));
+        CVProfile saved = cvProfileRepository.save(profile);
+        CVDetailResponse response = toResponse(saved);
+        eventPublisher.publish(CVProfileEventType.UPDATED, userId, toEventData(response));
+        return response;
+    }
+
+    private CVProfileEventData toEventData(CVDetailResponse response) {
+        String cvAttachmentUrl = null;
+        if (response.getCvAttachmentId() != null) {
+            AttachmentUrlResponse urlResponse = attachmentService.createInternalDownloadUrl(
+                    response.getUserId(), response.getCvAttachmentId());
+            cvAttachmentUrl = urlResponse.getUrl();
+        }
+        return new CVProfileEventData(
+                response.getUserId(),
+                response.getPositionId(),
+                response.getWorkLocationId(),
+                response.getCvAttachmentId(),
+                cvAttachmentUrl,
+                response.getSummary(),
+                response.getEduLevel(),
+                response.getEducation(),
+                response.getSkills());
     }
 
     @Transactional

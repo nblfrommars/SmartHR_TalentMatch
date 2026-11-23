@@ -21,6 +21,7 @@ import com.hr.user.cv.dto.request.CreateUserRequest;
 import com.hr.user.cv.dto.response.UserResponse;
 import com.hr.user.cv.entity.User;
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.enums.Gender;
 import com.hr.user.cv.mapper.UserMapperImpl;
 import com.hr.user.cv.service.UserService;
 
@@ -38,6 +39,7 @@ class UserControllerTest {
         user.setUserName("alice");
         user.setFullName("Alice Nguyen");
         user.setDob(new Date(0));
+        user.setGender(Gender.FEMALE);
         user.setRole(UserRole.APPLICANT);
         user.setActive(true);
 
@@ -49,6 +51,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$[0].userName").value("alice"))
                 .andExpect(jsonPath("$[0].fullName").value("Alice Nguyen"))
                 .andExpect(jsonPath("$[0].role").value("USER"))
+                .andExpect(jsonPath("$[0].gender").value("FEMALE"))
                 .andExpect(jsonPath("$[0].active").value(true));
     }
 

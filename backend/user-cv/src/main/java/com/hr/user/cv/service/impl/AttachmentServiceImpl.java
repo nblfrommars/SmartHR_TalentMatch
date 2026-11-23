@@ -86,14 +86,24 @@ public class AttachmentServiceImpl implements AttachmentService {
     @Override
     public AttachmentUrlResponse createDownloadUrl(UUID userId, boolean admin, UUID attachmentId) {
         Attachment attachment = findAuthorized(userId, admin, attachmentId);
+        return createUrl(publicMinioClient, attachment);
+    }
+
+    @Override
+    public AttachmentUrlResponse createInternalDownloadUrl(UUID userId, UUID attachmentId) {
+        Attachment attachment = findAuthorized(userId, false, attachmentId);
+        return createUrl(minioClient, attachment);
+    }
+
+    private AttachmentUrlResponse createUrl(MinioClient client, Attachment attachment) {
         try {
-            String url = publicMinioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+            String url = client.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
                     .bucket(attachment.getBucket())
                     .object(attachment.getObjectKey())
                     .expiry(URL_EXPIRY_SECONDS, TimeUnit.SECONDS)
                     .build());
-            return new AttachmentUrlResponse(attachmentId, url, URL_EXPIRY_SECONDS);
+            return new AttachmentUrlResponse(attachment.getId(), url, URL_EXPIRY_SECONDS);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to create attachment URL", ex);
         }
