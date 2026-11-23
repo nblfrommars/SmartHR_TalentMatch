@@ -65,10 +65,11 @@ public class JobController {
             @RequestParam(required = false) Long salaryMin,
             @RequestParam(required = false) Long salaryMax,
             @RequestParam(required = false) JobLevel level,
+            @RequestParam(required = false) String companyName,
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(jobService.searchJobs(industryId, locationId, salaryMin, salaryMax, level, keyword, pageable));
+        return ResponseEntity.ok(jobService.searchJobs(industryId, locationId, salaryMin, salaryMax, level, companyName, keyword, pageable));
     }
 
     @GetMapping("/company")

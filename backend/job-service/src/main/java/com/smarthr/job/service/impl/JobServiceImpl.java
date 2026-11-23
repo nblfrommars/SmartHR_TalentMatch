@@ -98,9 +98,9 @@ public class JobServiceImpl implements JobService {
     @Override
     @Transactional(readOnly = true)
     public Page<JobRes> searchJobs(UUID industryId, UUID locationId, Long salaryMin, Long salaryMax, JobLevel level,
-            String keyword, Pageable pageable) {
+            String companyName, String keyword, Pageable pageable) {
         Specification<Job> spec = JobSpecifications.openAndNotExpired(OffsetDateTime.now())
-                .and(JobSpecifications.filter(industryId, locationId, salaryMin, salaryMax, level, keyword));
+                .and(JobSpecifications.filter(industryId, locationId, salaryMin, salaryMax, level, companyName, keyword));
         return jobRepo.findAll(spec, pageable).map(jobMapper::toResponse);
     }
 

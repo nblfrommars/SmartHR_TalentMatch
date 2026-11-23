@@ -41,7 +41,7 @@ public final class JobSpecifications {
     }
 
     public static Specification<Job> filter(UUID industryId, UUID locationId, Long salaryMin, Long salaryMax,
-            JobLevel level, String keyword) {
+            JobLevel level, String companyName, String keyword) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -63,6 +63,10 @@ public final class JobSpecifications {
             }
             if (level != null) {
                 predicates.add(cb.equal(root.get("level"), level));
+            }
+            if (companyName != null && !companyName.isBlank()) {
+                String pattern = "%" + escapeLike(companyName.trim().toLowerCase()) + "%";
+                predicates.add(cb.like(cb.lower(root.get("companyName")), pattern, ESCAPE));
             }
             if (keyword != null && !keyword.isBlank()) {
                 String pattern = "%" + escapeLike(keyword.trim().toLowerCase()) + "%";

@@ -252,6 +252,7 @@ class JobServiceIntegrationTest {
 
     private Map<String, Object> jobBody(String title, List<Map<String, Object>> skills) {
         Map<String, Object> body = new HashMap<>();
+        body.put("companyName", "Acme Corp");
         body.put("title", title);
         body.put("description", "Description of " + title);
         body.put("level", "SENIOR");
@@ -293,6 +294,7 @@ class JobServiceIntegrationTest {
     private Job saveRawJob(String title, JobStatus status, OffsetDateTime deadline) {
         return jobRepo.saveAndFlush(Job.builder()
                 .companyId(companyId)
+                .companyName("Acme Corp")
                 .createdBy(userId)
                 .title(title)
                 .description("raw")

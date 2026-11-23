@@ -27,6 +27,7 @@ public class JobMapper {
 
     public Job toEntity(JobReq req) {
         Job job = Job.builder()
+                .companyName(req.getCompanyName().trim())
                 .title(req.getTitle())
                 .description(req.getDescription())
                 .level(req.getLevel())
@@ -42,6 +43,7 @@ public class JobMapper {
     }
 
     public void updateEntity(Job job, JobReq req) {
+        job.setCompanyName(req.getCompanyName().trim());
         job.setTitle(req.getTitle());
         job.setDescription(req.getDescription());
         job.setLevel(req.getLevel());
@@ -102,6 +104,7 @@ public class JobMapper {
                 .id(job.getId())
                 .companyId(job.getCompanyId())
                 .createdBy(job.getCreatedBy())
+                .companyName(job.getCompanyName())
                 .title(job.getTitle())
                 .description(job.getDescription())
                 .level(job.getLevel())

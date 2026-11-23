@@ -53,6 +53,9 @@ public class Job {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
+    @Column(name = "company_name", nullable = false, length = 255)
+    private String companyName;
+
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
