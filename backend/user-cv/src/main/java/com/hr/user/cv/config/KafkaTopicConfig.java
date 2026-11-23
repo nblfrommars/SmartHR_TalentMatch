@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 
 import com.hr.user.cv.event.CVProfileEventType;
+import com.hr.user.cv.event.JobApplicationEventType;
 
 @Configuration
 @ConditionalOnProperty(name = "app.kafka.create-topics", havingValue = "true", matchIfMissing = true)
@@ -17,6 +18,15 @@ public class KafkaTopicConfig {
     NewTopic cvProfileEventsTopic(@Value("${app.kafka.partitions:3}") int partitions,
             @Value("${app.kafka.replicas:1}") int replicas) {
         return TopicBuilder.name(CVProfileEventType.TOPIC)
+                .partitions(partitions)
+                .replicas(replicas)
+                .build();
+    }
+
+    @Bean
+    NewTopic jobApplicationEventsTopic(@Value("${app.kafka.partitions:3}") int partitions,
+            @Value("${app.kafka.replicas:1}") int replicas) {
+        return TopicBuilder.name(JobApplicationEventType.TOPIC)
                 .partitions(partitions)
                 .replicas(replicas)
                 .build();
