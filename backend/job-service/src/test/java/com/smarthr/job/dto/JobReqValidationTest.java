@@ -84,6 +84,7 @@ class JobReqValidationTest {
 
     private static CreateJobReq validRequest() {
         CreateJobReq req = new CreateJobReq();
+        req.setCompanyName("Acme Corp");
         req.setTitle("Senior Java Developer");
         req.setDescription("Build services");
         req.setLevel(JobLevel.SENIOR);

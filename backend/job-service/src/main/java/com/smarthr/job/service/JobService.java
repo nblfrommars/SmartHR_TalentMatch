@@ -22,7 +22,7 @@ public interface JobService {
     Page<JobRes> getJobsByCompany(UUID companyId, JobStatus status, Pageable pageable);
 
     Page<JobRes> searchJobs(UUID industryId, UUID locationId, Long salaryMin, Long salaryMax, JobLevel level,
-            String keyword, Pageable pageable);
+            String companyName, String keyword, Pageable pageable);
 
     void closeJob(UUID id, UUID companyId);
 

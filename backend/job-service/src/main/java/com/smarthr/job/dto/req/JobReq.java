@@ -29,6 +29,10 @@ public abstract class JobReq {
 
     @NotBlank
     @Size(max = 255)
+    private String companyName;
+
+    @NotBlank
+    @Size(max = 255)
     private String title;
 
     @NotBlank
