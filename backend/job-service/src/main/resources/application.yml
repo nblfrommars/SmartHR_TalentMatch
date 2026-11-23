@@ -26,6 +26,15 @@ spring:
         jdbc:
           time_zone: UTC
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # issuer-uri phải khớp claim "iss" trong token (địa chỉ Keycloak mà trình duyệt thấy)
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8180/realms/smarthr}
+          # jwk-set-uri là địa chỉ service lấy khóa công khai (trong Docker: keycloak:8080)
+          jwk-set-uri: ${AUTH_JWK_SET_URI:http://localhost:8180/realms/smarthr/protocol/openid-connect/certs}
+
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -46,6 +55,8 @@ management:
         include: health,info,prometheus
 
 app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174}
   scheduling:
     enabled: true
   kafka:
