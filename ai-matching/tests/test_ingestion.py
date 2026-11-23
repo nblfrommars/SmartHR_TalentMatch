@@ -10,7 +10,7 @@ from app.core.container import Container, build_container
 from app.embedding import CachedDenseEmbedder, HashingEmbedder, InMemoryEmbeddingCache
 from app.ingestion.events import CvEvent, JobEvent, RedisProcessedEvents
 from app.vectorstore import Kind, point_id
-from tests.factories import make_cv, make_job
+from tests.factories import USER_ID, cv_envelope, job_envelope, make_cv_profile, make_job_res
 
 
 class CountingEmbedder(HashingEmbedder):
@@ -32,11 +32,9 @@ async def container():
     await c.close()
 
 
-def job_event(type_: str, job_id: str = "job-1", **snapshot) -> JobEvent:
-    data = {"eventId": str(uuid.uuid4()), "type": type_, "jobId": job_id}
-    if type_ in ("created", "updated"):
-        data["snapshot"] = make_job(job_id, **snapshot).model_dump(by_alias=True)
-    return JobEvent.model_validate(data)
+def job_event(type_: str, job_id: str = "job-1", **fields) -> JobEvent:
+    """type_ ngắn ("created") -> envelope thật ("job.created") kèm JobRes đầy đủ."""
+    return JobEvent.model_validate(job_envelope(f"job.{type_}", make_job_res(job_id, **fields)))
 
 
 # ---------- Store ----------
@@ -70,26 +68,42 @@ async def test_job_lifecycle(container: Container):
     point = await store.get(Kind.JOB, "job-1")
     assert point is not None
     assert point.payload["status"] == "OPEN"
-    assert point.payload["required_skills"] == ["java", "spring boot", "postgresql", "kafka"]
+    # skill mustHave cũng là skill bắt buộc
+    assert set(point.payload["required_skills"]) == {"java", "spring boot", "postgresql", "kafka"}
+    assert point.payload["must_have_skills"] == ["java"]
+    assert point.payload["nice_skills"] == ["kubernetes"]
     assert len(point.dense) == 64
     assert point.sparse.indices
 
-    await events.handle_job(job_event("updated", salaryMax=60_000_000))
+    await events.handle_job(job_event("updated", salaryMax=60_000_000, version=1))
     assert (await store.get(Kind.JOB, "job-1")).payload["salary_max"] == 60_000_000
 
-    await events.handle_job(job_event("closed"))
+    await events.handle_job(job_event("closed", status="CLOSED", version=2))
     closed = await store.get(Kind.JOB, "job-1")
     assert closed.payload["status"] == "CLOSED"
-    assert closed.payload["job_id"] == "job-1"  # các field khác giữ nguyên
+    assert closed.payload["salary_max"] == 50_000_000  # closed gửi JobRes đầy đủ, ghi đè cả job
 
-    await events.handle_job(job_event("deleted"))
+    await events.handle_job(job_event("deleted", status="CLOSED", version=2))
     assert await store.get(Kind.JOB, "job-1") is None
 
 
 async def test_expired_marks_closed(container: Container):
     await container.events.handle_job(job_event("created"))
-    await container.events.handle_job(job_event("expired"))
+    # Kể cả khi data còn ghi OPEN, job.expired vẫn phải làm job biến khỏi gợi ý
+    await container.events.handle_job(job_event("expired", status="OPEN", version=1))
     assert (await container.store.get(Kind.JOB, "job-1")).payload["status"] == "CLOSED"
+
+
+async def test_stale_event_is_ignored(container: Container):
+    """Event cũ đến muộn (version nhỏ hơn) không được ghi đè bản mới hơn."""
+    events, store = container.events, container.store
+    await events.handle_job(job_event("closed", status="CLOSED", version=3))
+
+    assert await events.handle_job(job_event("updated", status="OPEN", version=2)) is True
+    assert (await store.get(Kind.JOB, "job-1")).payload["status"] == "CLOSED"
+
+    await events.handle_job(job_event("updated", status="OPEN", version=4))
+    assert (await store.get(Kind.JOB, "job-1")).payload["status"] == "OPEN"
 
 
 async def test_duplicate_event_is_skipped(container: Container):
@@ -107,18 +121,22 @@ async def test_metadata_only_update_does_not_re_embed(container: Container):
     container.indexer.dense = CachedDenseEmbedder(inner, InMemoryEmbeddingCache())
 
     await container.events.handle_job(job_event("created"))
-    await container.events.handle_job(job_event("updated", salaryMin=35_000_000))
+    await container.events.handle_job(job_event("updated", salaryMin=35_000_000, version=1))
     assert len(inner.texts) == 1  # lần 2 lấy từ cache
 
-    await container.events.handle_job(job_event("updated", title="Principal Java Engineer"))
+    await container.events.handle_job(
+        job_event("updated", title="Principal Java Engineer", version=2)
+    )
     assert len(inner.texts) == 2  # nội dung đổi thì embed lại
 
 
-def test_job_event_requires_snapshot_for_upserts():
-    with pytest.raises(ValidationError, match="snapshot"):
-        JobEvent.model_validate({"eventId": "e", "type": "created", "jobId": "j"})
-    with pytest.raises(ValidationError):
-        JobEvent.model_validate({"eventId": "e", "type": "archived", "jobId": "j"})
+def test_job_event_validation():
+    with pytest.raises(ValidationError, match="data"):
+        JobEvent.model_validate({"eventId": "e", "type": "job.created"})
+    with pytest.raises(ValidationError):  # type không thuộc JobEventType
+        JobEvent.model_validate(job_envelope("job.archived", make_job_res()))
+    with pytest.raises(ValidationError):  # type kiểu bản nháp cũ (thiếu tiền tố "job.")
+        JobEvent.model_validate(job_envelope("created", make_job_res()))
 
 
 # ---------- CV events ----------
@@ -126,33 +144,46 @@ def test_job_event_requires_snapshot_for_upserts():
 
 async def test_cv_lifecycle(container: Container):
     store, events = container.store, container.events
-    snapshot = make_cv("cv-1", searchable=False).model_dump(by_alias=True)
 
-    await events.handle_cv(
-        CvEvent.model_validate(
-            {"eventId": "e1", "type": "saved", "cvId": "cv-1", "snapshot": snapshot}
+    created = CvEvent.model_validate(cv_envelope("cv_profile.created", make_cv_profile()))
+    assert await events.handle_cv(created) is True
+    assert await events.handle_cv(created) is False  # giao lại: bỏ qua
+    point = await store.get(Kind.CV, USER_ID)
+    assert point.payload["cv_id"] == point.payload["user_id"] == USER_ID
+    assert point.payload["years_experience"] == 4
+    assert point.payload["searchable"] is False  # mặc định bảo vệ dữ liệu cá nhân
+
+    updated = make_cv_profile(skills=[{"skill": "Golang", "yearsOfExperience": 1}])
+    await events.handle_cv(CvEvent.model_validate(cv_envelope("cv_profile.updated", updated)))
+    point = await store.get(Kind.CV, USER_ID)
+    assert point.payload["skills"] == ["golang"]
+    assert await store.count(Kind.CV) == 1  # một User một CV: ghi đè, không tạo thêm
+
+
+async def test_cv_searchable_default_from_config():
+    c = await build_container(
+        Settings(
+            qdrant_url=":memory:",
+            embedding_provider="hashing",
+            embedding_dimension=64,
+            cv_searchable_default=True,
         )
     )
-    assert (await store.get(Kind.CV, "cv-1")).payload["searchable"] is False
-
-    await events.handle_cv(
-        CvEvent.model_validate(
-            {"eventId": "e2", "type": "visibility_changed", "cvId": "cv-1", "searchable": True}
-        )
-    )
-    assert (await store.get(Kind.CV, "cv-1")).payload["searchable"] is True
-
-    await events.handle_cv(
-        CvEvent.model_validate({"eventId": "e3", "type": "deleted", "cvId": "cv-1"})
-    )
-    assert await store.get(Kind.CV, "cv-1") is None
+    try:
+        event = CvEvent.model_validate(cv_envelope("cv_profile.created", make_cv_profile()))
+        await c.events.handle_cv(event)
+        assert (await c.store.get(Kind.CV, USER_ID)).payload["searchable"] is True
+    finally:
+        await c.close()
 
 
 def test_cv_event_validation():
-    with pytest.raises(ValidationError, match="snapshot"):
-        CvEvent.model_validate({"eventId": "e", "type": "saved", "cvId": "c"})
-    with pytest.raises(ValidationError, match="searchable"):
-        CvEvent.model_validate({"eventId": "e", "type": "visibility_changed", "cvId": "c"})
+    with pytest.raises(ValidationError, match="data"):
+        CvEvent.model_validate({"eventId": "e", "type": "cv_profile.created"})
+    with pytest.raises(ValidationError):  # type kiểu bản nháp cũ
+        CvEvent.model_validate(cv_envelope("cv.saved", make_cv_profile()))
+    with pytest.raises(ValidationError):  # eduLevel ngoài 0..7
+        CvEvent.model_validate(cv_envelope("cv_profile.created", make_cv_profile(eduLevel=9)))
 
 
 async def test_redis_processed_events():
@@ -172,3 +203,49 @@ def test_app_startup_creates_collections():
         assert client.get("/health").status_code == 200
         container: Container = app.state.container
         assert container.store.collection(Kind.JOB) == "jobs"
+
+
+async def test_startup_retries_until_qdrant_is_ready(monkeypatch):
+    """Qdrant chưa sẵn sàng lúc khởi động (compose bật song song): thử lại, không chết ngay."""
+    import app.core.container as container_module
+    from app.vectorstore import QdrantStore
+
+    calls = 0
+    real = QdrantStore.ensure_collections
+
+    async def flaky(self):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise ConnectionError("Qdrant đang khởi động")
+        await real(self)
+
+    monkeypatch.setattr(QdrantStore, "ensure_collections", flaky)
+    monkeypatch.setattr(container_module.asyncio, "sleep", _no_sleep)
+    c = await build_container(
+        Settings(qdrant_url=":memory:", embedding_provider="hashing", embedding_dimension=64)
+    )
+    try:
+        assert calls == 3
+        assert await c.qdrant.collection_exists("jobs")
+    finally:
+        await c.close()
+
+
+async def test_startup_gives_up_after_max_attempts(monkeypatch):
+    import app.core.container as container_module
+    from app.vectorstore import QdrantStore
+
+    async def broken(self):
+        raise ConnectionError("Qdrant chết hẳn")
+
+    monkeypatch.setattr(QdrantStore, "ensure_collections", broken)
+    monkeypatch.setattr(container_module.asyncio, "sleep", _no_sleep)
+    with pytest.raises(ConnectionError):
+        await build_container(
+            Settings(qdrant_url=":memory:", embedding_provider="hashing", qdrant_startup_attempts=2)
+        )
+
+
+async def _no_sleep(_seconds):
+    return None

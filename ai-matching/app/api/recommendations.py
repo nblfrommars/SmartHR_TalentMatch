@@ -94,6 +94,8 @@ async def recommend_jobs(
     industry: Annotated[list[str] | None, Query()] = None,
     salary_min: Annotated[int | None, Query(alias="salaryMin", ge=0)] = None,
     exclude_job_ids: Annotated[list[str] | None, Query(alias="excludeJobIds")] = None,
+    location_id: Annotated[list[str] | None, Query(alias="locationId")] = None,
+    industry_id: Annotated[list[str] | None, Query(alias="industryId")] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> JobRecommendations:
     flt = filters.job_filter(
@@ -103,6 +105,8 @@ async def recommend_jobs(
         industries=industry,
         salary_min=salary_min,
         exclude_job_ids=exclude_job_ids,
+        location_ids=location_id,
+        industry_ids=industry_id,
     )
     try:
         result = await container.recommender.recommend_jobs(cv_id, flt, limit=limit)

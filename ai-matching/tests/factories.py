@@ -1,5 +1,6 @@
 """Dữ liệu mẫu dùng chung cho test."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from app.schemas import CvSnapshot, JobSnapshot
@@ -47,3 +48,100 @@ def make_cv(cv_id: str = "cv-1", **overrides) -> CvSnapshot:
     }
     data.update(overrides)
     return CvSnapshot.model_validate(data)
+
+
+# ---------- Message thật của job-service (EventEnvelope + JobRes), xem DATAFORAISERVICE.md
+
+HA_NOI_ID = "11111111-1111-1111-1111-111111111111"
+CAU_GIAY_ID = "22222222-2222-2222-2222-222222222222"  # quận thuộc Hà Nội
+IT_ID = "33333333-3333-3333-3333-333333333333"
+
+
+def make_job_res(job_id: str = "job-1", **overrides) -> dict:
+    """JSON `JobRes` đúng như job-service serialize (camelCase, location/industry là object)."""
+    data = {
+        "id": job_id,
+        "companyId": "company-1",
+        "createdBy": "hr-1",
+        "companyName": "FPT Software",
+        "title": "Senior Java Backend Developer",
+        "description": "Phát triển hệ thống microservices với Spring Boot và Kafka.",
+        "level": "SENIOR",
+        "jobType": "FULL_TIME",
+        "workMode": "HYBRID",
+        "location": {"id": CAU_GIAY_ID, "name": "Cầu Giấy", "parentId": HA_NOI_ID},
+        "industry": {"id": IT_ID, "name": "Công nghệ thông tin", "parentId": None},
+        "salaryMin": 30_000_000,
+        "salaryMax": 50_000_000,
+        "minYearsExp": 3,
+        "deadline": iso(30),
+        "status": "OPEN",
+        "version": 0,
+        "createdAt": iso(-1),
+        "updatedAt": iso(-1),
+        "publishedAt": iso(-1),
+        "skills": [
+            {"skill": "Java", "mustHave": True, "required": True},
+            {"skill": "Spring Boot", "mustHave": False, "required": True},
+            {"skill": "PostgreSQL", "mustHave": False, "required": True},
+            {"skill": "Kafka", "mustHave": False, "required": True},
+            {"skill": "Kubernetes", "mustHave": False, "required": False},
+        ],
+    }
+    data.update(overrides)
+    return data
+
+
+def job_envelope(type_: str, data: dict, event_id: str | None = None) -> dict:
+    """EventEnvelope của common-lib: type là "job.created", "job.updated"..."""
+
+    return {
+        "eventId": event_id or str(uuid.uuid4()),
+        "type": type_,
+        "version": 1,
+        "occurredAt": iso(0),
+        "producer": "job-service",
+        "correlationId": "corr-1",
+        "data": data,
+    }
+
+
+# ---------- Message thật của user-cv (EventEnvelope + CVProfileEventData)
+
+USER_ID = "aaaaaaaa-0000-4000-8000-000000000001"
+
+
+def make_cv_profile(user_id: str = USER_ID, **overrides) -> dict:
+    """JSON `CVProfileEventData` đúng như user-cv serialize (eduLevel là SỐ, id vị trí là Long)."""
+    data = {
+        "userId": user_id,
+        "positionId": 3,
+        "workLocationId": 1,
+        "cvAttachmentId": None,
+        "cvAttachmentUrl": None,
+        "summary": "Backend developer 4 năm kinh nghiệm xây dựng microservices với Spring Boot.",
+        "eduLevel": 4,
+        "education": "Đại học Bách khoa Hà Nội - Công nghệ thông tin",
+        "skills": [
+            {"skill": "Java", "yearsOfExperience": 4},
+            {"skill": "Spring Boot", "yearsOfExperience": 3},
+            {"skill": "PostgreSQL", "yearsOfExperience": 3},
+            {"skill": "Kafka", "yearsOfExperience": 2},
+            {"skill": "Docker", "yearsOfExperience": 2},
+        ],
+    }
+    data.update(overrides)
+    return data
+
+
+def cv_envelope(type_: str, data: dict, event_id: str | None = None) -> dict:
+    """EventEnvelope của user-cv: type là "cv_profile.created" / "cv_profile.updated"."""
+    return {
+        "eventId": event_id or str(uuid.uuid4()),
+        "type": type_,
+        "version": 1,
+        "occurredAt": iso(0),
+        "producer": "user-service",
+        "correlationId": None,
+        "data": data,
+    }

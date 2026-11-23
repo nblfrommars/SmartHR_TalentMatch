@@ -12,6 +12,16 @@ from app.schemas.cv import (
     CvSkill,
     CvSnapshot,
 )
+from app.schemas.events import (
+    CvProfileData,
+    CvProfileSkill,
+    EduLevel,
+    EventEnvelope,
+    IndustryRes,
+    JobRes,
+    JobSkillRes,
+    LocationRes,
+)
 from app.schemas.job import JobSnapshot
 
 __all__ = [
@@ -20,13 +30,21 @@ __all__ = [
     "CvEducation",
     "CvExperience",
     "CvLanguage",
+    "CvProfileData",
+    "CvProfileSkill",
     "CvProject",
     "CvSchema",
     "CvSkill",
     "CvSnapshot",
+    "EduLevel",
+    "EventEnvelope",
+    "IndustryRes",
+    "JobRes",
+    "JobSkillRes",
     "JobSnapshot",
     "JobStatus",
     "JobType",
     "Level",
+    "LocationRes",
     "WorkMode",
 ]

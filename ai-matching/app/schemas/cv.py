@@ -2,7 +2,8 @@
 
 - CvContent: phần nội dung KHÔNG chứa PII, dùng để dựng document index.
 - CvSchema: kết quả parse PDF trả cho User xem lại, có thêm full_name/email/phone.
-- CvSnapshot: snapshot trong event cv.events (không PII) + id, version.
+- CvSnapshot: mô hình CV nội bộ để index (không PII) + id, version. Event thật từ user-cv
+  (`CvProfileData` trong app/schemas/events.py) được chuyển sang đây bằng `to_snapshot()`.
 """
 
 from pydantic import AwareDatetime, Field, NonNegativeFloat, NonNegativeInt
@@ -53,6 +54,7 @@ class CvDesired(CamelModel):
 
 class CvContent(CamelModel):
     headline: str | None = None
+    summary: str | None = None  # phần giới thiệu bản thân (văn bản tự do)
     location: str | None = None
     years_experience: NonNegativeFloat | None = None
     level: Level | None = None
@@ -77,3 +79,7 @@ class CvSnapshot(CvContent):
     searchable: bool = False
     version: int = 1
     updated_at: AwareDatetime
+    # id tham chiếu bên user-cv (bảng position, location riêng của user-cv), lưu lại để tra cứu
+    position_id: int | None = None
+    work_location_id: int | None = None
+    edu_level: str | None = None
