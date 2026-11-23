@@ -8,3 +8,21 @@ spring:
     default: local # chỉ dùng khi KHÔNG set profile nào khác
   jpa:
     open-in-view: false
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 10000
+        request.timeout.ms: 5000
+        max.block.ms: 5000
+
+app:
+  kafka:
+    create-topics: ${APP_KAFKA_CREATE_TOPICS:true}
+    partitions: ${APP_KAFKA_PARTITIONS:3}
+    replicas: ${APP_KAFKA_REPLICAS:1}
