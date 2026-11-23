@@ -62,7 +62,9 @@ class JobSkillRes(CamelModel):
 
 class JobRes(CamelModel):
     id: str
-    company_id: str
+    # DATAFORAISERVICE.md không liệt kê companyId nhưng JobRes.java vẫn gửi. Không bắt buộc, để
+    # job-service có bỏ trường này thì event vẫn được nhận (không rơi hết vào DLQ)
+    company_id: str | None = None
     company_name: str | None = None
     title: str = Field(min_length=1)
     description: str | None = ""

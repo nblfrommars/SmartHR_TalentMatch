@@ -25,6 +25,7 @@ from qdrant_client import models as qm
 from app.explain.template import Explanation, explain_for_candidate, explain_for_recruiter
 from app.retrieval.config import RetrievalConfig
 from app.retrieval.scoring import Breakdown, min_max, passes_hard_rules, score_pair
+from app.text import normalize_keyword
 from app.vectorstore import DENSE, SPARSE, Kind, PointData, QdrantStore
 
 
@@ -242,7 +243,7 @@ class Recommender:
         per_company: Counter[str] = Counter()
         result = []
         for match in ranked:
-            company = match.payload.get("company_id", "")
+            company = company_key(match.payload)
             if per_company[company] >= self.config.max_per_company:
                 continue
             per_company[company] += 1
@@ -250,6 +251,17 @@ class Recommender:
             if len(result) == limit:
                 break
         return result
+
+
+def company_key(job: dict[str, Any]) -> str:
+    """Khóa "công ty" để giới hạn số job mỗi công ty: company_id, thiếu thì tên công ty (đã chuẩn
+    hóa), thiếu cả hai thì coi job là một công ty riêng (không gộp nhầm các job lạ với nhau).
+    """
+    if company_id := job.get("company_id"):
+        return f"id:{company_id}"
+    if name := normalize_keyword(job.get("company_name")):
+        return f"name:{name}"
+    return f"job:{job.get('job_id', '')}"
 
 
 def _ranked(matches: list[Match]) -> list[Match]:
