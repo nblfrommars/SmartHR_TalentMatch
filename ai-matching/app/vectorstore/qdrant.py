@@ -150,6 +150,13 @@ class QdrantStore:
             payload=found[0].payload or {},
         )
 
+    async def get_payload(self, kind: Kind, ref_id: str) -> dict[str, Any] | None:
+        """Chỉ đọc payload (không kèm vector), dùng cho kiểm tra quyền."""
+        found = await self.client.retrieve(
+            self.collection(kind), [point_id(ref_id)], with_payload=True, with_vectors=False
+        )
+        return (found[0].payload or {}) if found else None
+
     async def count(self, kind: Kind) -> int:
         return (await self.client.count(self.collection(kind), exact=True)).count
 

@@ -17,6 +17,7 @@ from app.ingestion.events import EventHandler, InMemoryProcessedEvents, RedisPro
 from app.ingestion.indexer import Indexer
 from app.parsing.extractor import OpenAICvExtractor
 from app.parsing.service import CvParser
+from app.retrieval.cache import RecommendationCache
 from app.retrieval.config import get_retrieval_config
 from app.retrieval.service import Recommender
 from app.skills import get_normalizer
@@ -40,6 +41,8 @@ class Container:
     parser: CvParser | None
     # None khi AI_KAFKA_ENABLED=false
     consumer: KafkaEventConsumer | None = None
+    # None khi không dùng Redis hoặc AI_REC_CACHE_TTL_SECONDS=0
+    rec_cache: RecommendationCache | None = None
 
     async def close(self) -> None:
         if self.consumer is not None:
@@ -94,10 +97,12 @@ async def build_container(settings: Settings) -> Container:
     dense = build_dense_embedder(settings, redis)
     sparse = Bm25Encoder()
     indexer = Indexer(store, dense, sparse)
+    # Gắn với bộ collection đang ghi: dựng index mới (collection khác) không lẫn dữ liệu cũ
+    index_namespace = f"{settings.qdrant_jobs_collection}+{settings.qdrant_candidates_collection}"
     processed = (
         RedisProcessedEvents(
             redis,
-            namespace=f"{settings.qdrant_jobs_collection}+{settings.qdrant_candidates_collection}",
+            namespace=index_namespace,
         )
         if redis is not None
         else InMemoryProcessedEvents()
@@ -116,7 +121,12 @@ async def build_container(settings: Settings) -> Container:
             max_chars=settings.cv_max_chars,
         )
 
-    events = EventHandler(indexer, processed, settings.cv_searchable_default)
+    rec_cache = (
+        RecommendationCache(redis, settings.rec_cache_ttl_seconds, namespace=index_namespace)
+        if redis is not None and settings.rec_cache_ttl_seconds > 0
+        else None
+    )
+    events = EventHandler(indexer, processed, settings.cv_searchable_default, rec_cache)
     return Container(
         settings=settings,
         qdrant=qdrant,
@@ -129,6 +139,7 @@ async def build_container(settings: Settings) -> Container:
         recommender=Recommender(store, get_retrieval_config()),
         parser=parser,
         consumer=KafkaEventConsumer(settings, events) if settings.kafka_enabled else None,
+        rec_cache=rec_cache,
     )
 
 

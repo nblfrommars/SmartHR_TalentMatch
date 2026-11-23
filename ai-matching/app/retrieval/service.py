@@ -13,6 +13,7 @@ OpenAI: nhanh, rẻ, và cùng một cách encode với lúc index.
   7. Giải thích (template; LLM ở bước sau)
 """
 
+import math
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -40,6 +41,19 @@ class Match:
     payload: dict[str, Any]
     # True: job được bù vào cho CV sơ sài, không đạt ngưỡng gợi ý thông thường
     is_fallback: bool = False
+
+
+@dataclass(frozen=True)
+class PairScore:
+    """Điểm phù hợp của một cặp CV - job (lưu lại lúc apply để HR sắp xếp ứng viên)."""
+
+    score: float
+    passed: bool  # đạt luật cứng (đủ must_have, đủ skill, trên ngưỡng tau)
+    breakdown: Breakdown
+    for_candidate: Explanation
+    for_recruiter: Explanation
+    job: dict[str, Any]
+    cv: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -157,6 +171,32 @@ class Recommender:
                 )
         return _ranked(matches)[:limit]
 
+    async def match_pair(self, cv_id: str, job_id: str, now: datetime | None = None) -> PairScore:
+        """Chấm một cặp cụ thể. Thành phần "hybrid" là độ tương đồng cosine của vector dense
+        (kéo về [0, 1]), vì RRF chỉ có nghĩa khi xếp hạng nhiều kết quả.
+        """
+        now = now or datetime.now(UTC)
+        cv = await self._source(Kind.CV, cv_id)
+        job = await self._source(Kind.JOB, job_id)
+        hybrid = max(0.0, _cosine(cv.dense, job.dense))
+        breakdown, skills = score_pair(
+            job.payload,
+            cv.payload,
+            hybrid,
+            now,
+            self.config,
+            recency_ts=job.payload.get("published_ts"),
+        )
+        return PairScore(
+            score=breakdown.final(self.config),
+            passed=passes_hard_rules(breakdown, skills, self.config),
+            breakdown=breakdown,
+            for_candidate=explain_for_candidate(skills, breakdown),
+            for_recruiter=explain_for_recruiter(skills, breakdown),
+            job=job.payload,
+            cv=cv.payload,
+        )
+
     async def _source(self, kind: Kind, ref_id: str) -> PointData:
         point = await self.store.get(kind, ref_id)
         if point is None:
@@ -202,3 +242,9 @@ class Recommender:
 
 def _ranked(matches: list[Match]) -> list[Match]:
     return sorted(matches, key=lambda m: m.score, reverse=True)
+
+
+def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return dot / norm if norm else 0.0

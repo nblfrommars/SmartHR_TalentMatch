@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from openai import OpenAIError
 
+from app.api.auth import IdentityDep, Role
 from app.core.container import Container, get_container
 from app.parsing.extractor import ExtractionError
 from app.parsing.pdf import NotPdfError, PdfError, PdfTooLargeError
@@ -26,6 +27,7 @@ class ParsedCv(CamelModel):
     "/parse",
     response_model=ParsedCv,
     responses={
+        403: {"description": "Chỉ USER/ADMIN"},
         413: {"description": "File quá lớn"},
         415: {"description": "Không phải PDF"},
         422: {"description": "PDF hỏng hoặc dạng ảnh scan"},
@@ -36,7 +38,9 @@ class ParsedCv(CamelModel):
 async def parse_cv(
     file: Annotated[UploadFile, File(description="CV dạng PDF")],
     container: Annotated[Container, Depends(get_container)],
+    identity: IdentityDep,
 ) -> ParsedCv:
+    identity.require_roles(Role.USER, Role.ADMIN)
     if container.parser is None:
         raise HTTPException(503, detail="Chưa cấu hình AI_OPENAI_API_KEY, không parse được CV")
 

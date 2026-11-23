@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     app_name: str = "ai-matching"
     environment: str = "dev"
     log_level: str = "INFO"
+    # Cache kết quả gợi ý trong Redis (chỉ khi AI_EMBEDDING_CACHE=redis). 0 = tắt
+    rec_cache_ttl_seconds: int = 600
+    # true: bắt buộc có header X-User-Id (mọi request phải đi qua api-gateway).
+    # false (mặc định): cho phép service nội bộ gọi thẳng không kèm danh tính
+    require_identity: bool = False
     # Bật API nội bộ /ai/internal/* (nhận event qua HTTP thay Kafka) — chỉ dùng khi dev/test
     internal_api_enabled: bool = False
 

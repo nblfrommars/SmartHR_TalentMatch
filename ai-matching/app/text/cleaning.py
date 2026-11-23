@@ -31,10 +31,52 @@ def strip_html(text: str) -> str:
     return html.unescape(text)
 
 
+# Dấu tạm đánh dấu chỗ PII vừa bị xóa, để dọn nhãn/dấu câu đi kèm rồi bỏ đi
+_MARK = "\u241f"
+_SEP = r"[ \t,;|/·•–-]*"
+# Nhiều PII liền nhau ("a@b.com, 0912...", "a@b.com hoặc 0912...") -> một dấu
+_MARK_RUN = re.compile(rf"{_MARK}(?:{_SEP}(?:hoặc|or|và|and)?{_SEP}{_MARK})+", re.IGNORECASE)
+# Nhãn liên hệ đứng ngay trước PII: "Email: ", "SĐT - ", "Liên hệ qua "
+_CONTACT_LABEL = re.compile(
+    r"(?:\b(?:e-?mail|mail|gmail|s[đd]t|số điện thoại|điện thoại|đt|phone|tel|mobile|hotline"
+    r"|zalo|skype|web(?:site)?|linkedin|github|facebook|fb|portfolio|liên hệ|contact)\b"
+    rf"(?:\s+(?:qua|tại|at|via))?\s*[:：-]?\s*){_MARK}",
+    re.IGNORECASE,
+)
+_EMPTY_BRACKETS = re.compile(rf"[(\[]\s*{_MARK}?\s*[)\]]")
+_MARK_WITH_SEP = re.compile(rf"[ \t]*[,;|/·•][ \t]*{_MARK}|{_MARK}[ \t]*[,;|/·•]?")
+_SPACE_BEFORE_PUNCT = re.compile(r"[ \t]+([.,;:!?)])")
+_DANGLING_LABEL = re.compile(r":[ \t]*(?=[.,;]|$)", re.MULTILINE)
+_REPEATED_PUNCT = re.compile(r"([,;])(?:\s*[,;])+")
+_LEADING_PUNCT = re.compile(r"^[ \t]*[,;:|/.·•-]+[ \t]*", re.MULTILINE)
+_PUNCT_BEFORE_END = re.compile(r"[,;]+[ \t]*(?=[.!?]|$)", re.MULTILINE)
+
+
 def scrub_pii(text: str) -> str:
+    """Xóa email, URL, SĐT và dọn nhãn / dấu câu bị bỏ lại.
+
+    "Liên hệ: a@b.com, 0912345678. Thích Java" -> "Thích Java"
+    Chỉ xử lý quanh chỗ PII bị xóa nên không làm hỏng văn bản bình thường ("C++, Node.js.").
+    """
+    marked = text
     for pattern in (_EMAIL, _URL, _BARE_URL, _PHONE):
-        text = pattern.sub(" ", text)
-    return text
+        marked = pattern.sub(_MARK, marked)
+    if _MARK not in marked:
+        return text
+    marked = _MARK_RUN.sub(_MARK, marked)
+    marked = _CONTACT_LABEL.sub(_MARK, marked)
+    marked = _EMPTY_BRACKETS.sub(" ", marked)
+    marked = _MARK_WITH_SEP.sub(" ", marked)
+    marked = marked.replace(_MARK, " ")
+    # Câu liên hệ bị bỏ giữa hai câu: "dev. . Thích" -> "dev. Thích" (không đụng "...")
+    marked = re.sub(r"([.!?])[ \t]+\.(?!\.)", r"\1", marked)
+    marked = _SPACE_BEFORE_PUNCT.sub(r"\1", marked)
+    marked = _DANGLING_LABEL.sub("", marked)
+    marked = _REPEATED_PUNCT.sub(r"\1", marked)
+    marked = _PUNCT_BEFORE_END.sub("", marked)
+    marked = _LEADING_PUNCT.sub("", marked)
+    # Câu chỉ còn dấu chấm đứng đầu (". Thích Java") sau khi bỏ cả cụm liên hệ
+    return re.sub(r"(^|\n)[ \t]*\.[ \t]*", r"\1", marked)
 
 
 def find_contacts(text: str) -> tuple[list[str], list[str]]:
