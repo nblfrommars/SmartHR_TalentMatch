@@ -13,7 +13,7 @@ class JobSnapshot(CamelModel):
     """
 
     job_id: str
-    company_id: str
+    company_id: str | None = None
     company_name: str | None = None
     title: str = Field(min_length=1)
     description: str = ""
