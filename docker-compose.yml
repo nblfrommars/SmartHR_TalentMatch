@@ -253,6 +253,43 @@ services:
     networks:
       - smarthr-net
 
+  ai-matching:
+    build:
+      context: ./ai-matching
+    container_name: smarthr-ai-matching
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      AI_ENVIRONMENT: local
+      # Kafka consumer: nhận job.events (job-service) và cv.profile.events (user-cv)
+      AI_KAFKA_ENABLED: "true"
+      AI_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AI_QDRANT_URL: http://qdrant:6333
+      # DB 1 để tách khỏi dữ liệu của api-gateway (rate limit) ở DB 0
+      AI_REDIS_URL: redis://redis:6379/1
+      AI_EMBEDDING_CACHE: redis
+      # Chưa có OpenAI key thì dùng "hashing" (chạy được, gợi ý kém chính xác hơn).
+      # Có key: đặt AI_EMBEDDING_PROVIDER=openai và OPENAI_API_KEY trong .env
+      AI_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-hashing}
+      AI_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_LLM_EXPLANATIONS: ${AI_LLM_EXPLANATIONS:-false}
+      # user-cv chưa có cờ "cho phép HR tìm kiếm": false = HR chưa tìm thấy CV nào
+      AI_CV_SEARCHABLE_DEFAULT: ${AI_CV_SEARCHABLE_DEFAULT:-false}
+      # API nội bộ nhận event qua HTTP chỉ dùng khi test; đã có Kafka nên tắt
+      AI_INTERNAL_API_ENABLED: "false"
+    ports:
+      # Chỉ để dev gọi thẳng / xem Swagger (http://localhost:8083/docs).
+      # Client thật đi qua api-gateway (/api/v1/ai/**)
+      - "${AI_MATCHING_PORT:-8083}:8000"
+    networks:
+      - smarthr-net
+
 volumes:
   smarthr_pgdata:
   smarthr_kafkadata:

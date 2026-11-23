@@ -17,6 +17,7 @@ from typing import Protocol
 from redis.asyncio import Redis
 
 from app.ingestion.indexer import Indexer
+from app.retrieval.cache import RecommendationCache
 from app.schemas import CvProfileData, EventEnvelope, JobRes, JobStatus
 
 logger = logging.getLogger(__name__)
@@ -98,10 +99,16 @@ class RedisProcessedEvents:
 
 class EventHandler:
     def __init__(
-        self, indexer: Indexer, processed: ProcessedEvents, cv_searchable_default: bool = False
+        self,
+        indexer: Indexer,
+        processed: ProcessedEvents,
+        cv_searchable_default: bool = False,
+        rec_cache: RecommendationCache | None = None,
     ) -> None:
         self.indexer = indexer
         self.processed = processed
+        # Job/CV thay đổi thì kết quả gợi ý đã cache không còn đúng
+        self.rec_cache = rec_cache
         # user-cv chưa có cờ "cho phép HR tìm kiếm" nên dùng giá trị cấu hình cho mọi CV
         self.cv_searchable_default = cv_searchable_default
 
@@ -130,6 +137,8 @@ class EventHandler:
                 # Văn bản không đổi thì embedding lấy từ cache, không gọi lại OpenAI.
                 await self.indexer.index_jobs([snapshot])
 
+        if self.rec_cache is not None:
+            await self.rec_cache.invalidate_all()
         await self.processed.mark(event.event_id)
         logger.info("Đã xử lý %s job_id=%s", event.type, event.job_id)
         return True
@@ -150,6 +159,8 @@ class EventHandler:
             updated_at=event.occurred_at, searchable=self.cv_searchable_default
         )
         await self.indexer.index_cvs([snapshot])
+        if self.rec_cache is not None:
+            await self.rec_cache.invalidate_cv(event.cv_id)
 
         await self.processed.mark(event.event_id)
         logger.info("Đã xử lý %s cv_id=%s", event.type, event.cv_id)

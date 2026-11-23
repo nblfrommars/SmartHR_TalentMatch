@@ -13,6 +13,7 @@ OpenAI: nhanh, rẻ, và cùng một cách encode với lúc index.
   7. Giải thích (template; LLM ở bước sau)
 """
 
+import math
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -24,6 +25,7 @@ from qdrant_client import models as qm
 from app.explain.template import Explanation, explain_for_candidate, explain_for_recruiter
 from app.retrieval.config import RetrievalConfig
 from app.retrieval.scoring import Breakdown, min_max, passes_hard_rules, score_pair
+from app.text import normalize_keyword
 from app.vectorstore import DENSE, SPARSE, Kind, PointData, QdrantStore
 
 
@@ -40,6 +42,19 @@ class Match:
     payload: dict[str, Any]
     # True: job được bù vào cho CV sơ sài, không đạt ngưỡng gợi ý thông thường
     is_fallback: bool = False
+
+
+@dataclass(frozen=True)
+class PairScore:
+    """Điểm phù hợp của một cặp CV - job (lưu lại lúc apply để HR sắp xếp ứng viên)."""
+
+    score: float
+    passed: bool  # đạt luật cứng (đủ must_have, đủ skill, trên ngưỡng tau)
+    breakdown: Breakdown
+    for_candidate: Explanation
+    for_recruiter: Explanation
+    job: dict[str, Any]
+    cv: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -135,15 +150,27 @@ class Recommender:
         limit: int = 20,
         now: datetime | None = None,
     ) -> list[Match]:
-        now = now or datetime.now(UTC)
         job = await self._source(Kind.JOB, job_id)
-        hits = await self._hybrid(Kind.CV, job, candidate_filter)
+        return await self.search_candidates_for(job, candidate_filter, limit, now)
+
+    async def search_candidates_for(
+        self,
+        source: PointData,
+        candidate_filter: qm.Filter,
+        limit: int = 20,
+        now: datetime | None = None,
+    ) -> list[Match]:
+        """Tìm ứng viên cho một "job" bất kỳ: job đã index, hoặc yêu cầu dựng từ câu hỏi tự do
+        của HR (payload có required_skills, must_have_skills, level, min_years_exp).
+        """
+        now = now or datetime.now(UTC)
+        hits = await self._hybrid(Kind.CV, source, candidate_filter)
 
         matches = []
         for hit, hybrid in zip(hits, min_max([h.score for h in hits]), strict=True):
             cv = hit.payload or {}
             breakdown, skills = score_pair(
-                job.payload, cv, hybrid, now, self.config, recency_ts=cv.get("updated_ts")
+                source.payload, cv, hybrid, now, self.config, recency_ts=cv.get("updated_ts")
             )
             if passes_hard_rules(breakdown, skills, self.config):
                 matches.append(
@@ -156,6 +183,32 @@ class Recommender:
                     )
                 )
         return _ranked(matches)[:limit]
+
+    async def match_pair(self, cv_id: str, job_id: str, now: datetime | None = None) -> PairScore:
+        """Chấm một cặp cụ thể. Thành phần "hybrid" là độ tương đồng cosine của vector dense
+        (kéo về [0, 1]), vì RRF chỉ có nghĩa khi xếp hạng nhiều kết quả.
+        """
+        now = now or datetime.now(UTC)
+        cv = await self._source(Kind.CV, cv_id)
+        job = await self._source(Kind.JOB, job_id)
+        hybrid = max(0.0, _cosine(cv.dense, job.dense))
+        breakdown, skills = score_pair(
+            job.payload,
+            cv.payload,
+            hybrid,
+            now,
+            self.config,
+            recency_ts=job.payload.get("published_ts"),
+        )
+        return PairScore(
+            score=breakdown.final(self.config),
+            passed=passes_hard_rules(breakdown, skills, self.config),
+            breakdown=breakdown,
+            for_candidate=explain_for_candidate(skills, breakdown),
+            for_recruiter=explain_for_recruiter(skills, breakdown),
+            job=job.payload,
+            cv=cv.payload,
+        )
 
     async def _source(self, kind: Kind, ref_id: str) -> PointData:
         point = await self.store.get(kind, ref_id)
@@ -190,7 +243,7 @@ class Recommender:
         per_company: Counter[str] = Counter()
         result = []
         for match in ranked:
-            company = match.payload.get("company_id", "")
+            company = company_key(match.payload)
             if per_company[company] >= self.config.max_per_company:
                 continue
             per_company[company] += 1
@@ -200,5 +253,22 @@ class Recommender:
         return result
 
 
+def company_key(job: dict[str, Any]) -> str:
+    """Khóa "công ty" để giới hạn số job mỗi công ty: company_id, thiếu thì tên công ty (đã chuẩn
+    hóa), thiếu cả hai thì coi job là một công ty riêng (không gộp nhầm các job lạ với nhau).
+    """
+    if company_id := job.get("company_id"):
+        return f"id:{company_id}"
+    if name := normalize_keyword(job.get("company_name")):
+        return f"name:{name}"
+    return f"job:{job.get('job_id', '')}"
+
+
 def _ranked(matches: list[Match]) -> list[Match]:
     return sorted(matches, key=lambda m: m.score, reverse=True)
+
+
+def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return dot / norm if norm else 0.0
