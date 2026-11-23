@@ -51,7 +51,7 @@ public class SecurityConfig {
 
                         // Công khai: tìm kiếm, xem chi tiết (service tự ẩn job đã đóng/hết hạn), danh mục.
                         .requestMatchers(HttpMethod.GET, JOBS, JOBS + "/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/industries", "/api/v1/locations").permitAll()
+                        .requestMatchers(HttpMethod.GET, JOBS + "/industries", JOBS + "/locations").permitAll()
 
                         // Ghi dữ liệu: chỉ HR. Quyền sở hữu (createdBy) vẫn do service kiểm tra.
                         .requestMatchers(HttpMethod.POST, JOBS).hasRole("HR")

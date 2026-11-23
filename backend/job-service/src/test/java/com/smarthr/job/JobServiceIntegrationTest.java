@@ -231,8 +231,8 @@ class JobServiceIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/jobs/my")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/jobs")).andExpect(status().isOk());
-        mvc.perform(get("/api/v1/industries")).andExpect(status().isOk());
-        mvc.perform(get("/api/v1/locations")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/jobs/industries")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/jobs/locations")).andExpect(status().isOk());
     }
 
     @Test

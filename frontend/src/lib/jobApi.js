@@ -14,8 +14,8 @@ function toQuery(params) {
 export const jobApi = {
   search: (params) => apiRequest(`/api/v1/jobs${toQuery(params)}`),
   get: (id) => apiRequest(`/api/v1/jobs/${encodeURIComponent(id)}`),
-  industries: () => apiRequest("/api/v1/industries"),
-  locations: () => apiRequest("/api/v1/locations"),
+  industries: () => apiRequest("/api/v1/jobs/industries"),
+  locations: () => apiRequest("/api/v1/jobs/locations"),
 };
 
 export function isNotFound(error) {

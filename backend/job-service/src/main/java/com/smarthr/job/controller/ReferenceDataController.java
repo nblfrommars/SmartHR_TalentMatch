@@ -14,7 +14,9 @@ import com.smarthr.job.service.ReferenceDataService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/v1")
+// Nằm dưới /api/v1/jobs để api-gateway định tuyến được (route /api/v1/jobs/**) và không trùng
+// /api/v1/locations của user-service.
+@RequestMapping("/api/v1/jobs")
 @RequiredArgsConstructor
 public class ReferenceDataController {
 
