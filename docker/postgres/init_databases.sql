@@ -1,1 +1,3 @@
-create database job_db;
+CREATE DATABASE job_db;
+CREATE DATABASE user_db;
+CREATE DATABASE keycloak_db;
