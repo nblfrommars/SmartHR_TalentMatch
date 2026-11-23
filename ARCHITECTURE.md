@@ -73,7 +73,7 @@ SmartHR TalentMatch là website tuyển dụng có 3 nhóm người dùng:
 | **API Gateway** | Spring Cloud Gateway | Định tuyến, xác thực JWT tập trung, rate limit (Redis) |
 | **Backend services** | Java 21, Spring Boot 3.x | Theo yêu cầu dự án |
 | | Spring Security + JWT (jjwt / Nimbus), BCrypt | Băm mật khẩu và stateless auth |
-| | Spring Data JPA + Flyway | ORM và migration DB |
+| | Spring Data JPA + Flyway | ORM và migration DB (schema và seed nằm trong `src/main/resources/db/migration` của từng service; `docker/postgres/init_databases.sql` chỉ tạo database) |
 | | Spring Kafka | Giao tiếp bất đồng bộ giữa các service |
 | | Spring WebSocket (STOMP) | Đẩy thông báo |
 | | springdoc-openapi | Tài liệu API (Swagger) |
@@ -184,7 +184,7 @@ flowchart LR
 |---------|-------------|----------------|-----------------------------------|
 | **api-gateway** | Routing, verify JWT, CORS, rate limit, gán correlation-id | – | – |
 | **auth-service** | Đăng ký, đăng nhập, refresh/logout, quản lý user, role, công ty, Admin duyệt HR | `users`, `companies`, `refresh_tokens` (Redis) | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /users/me`, `PATCH /admin/hr/{id}/approve` |
-| **job-service** | CRUD job, tìm kiếm SQL (full-text + filter), scheduler đóng job hết hạn | `jobs`, `job_skills`, `outbox` | `POST /jobs`, `PUT /jobs/{id}`, `PATCH /jobs/{id}/close`, `GET /jobs?industry=&location=&salaryMin=&...`, `GET /jobs/{id}` |
+| **job-service** | CRUD job, tìm kiếm SQL (full-text + filter), scheduler đóng job hết hạn | `jobs`, `job_skills`, `outbox` | `POST /jobs`, `PUT /jobs/{id}`, `PATCH /jobs/{id}/close`, `DELETE /jobs/{id}`, `GET /jobs?industryId=&locationId=&salaryMin=&keyword=&...` (công khai, chỉ job OPEN chưa hết hạn), `GET /jobs/company` (HR, mọi trạng thái), `GET /jobs/{id}`, `GET /industries`, `GET /locations` |
 | **candidate-service** | Quản lý hồ sơ và CV (form + PDF), cờ privacy | `candidates`, `cvs`, `cv_skills`, `cv_experiences`, `outbox` | `POST /cvs` (form), `POST /cvs/upload` (multipart PDF), `PUT /cvs/{id}`, `GET /cvs/{id}`, `PATCH /cvs/{id}/visibility` |
 | **application-service** | Apply job, state machine trạng thái đơn, danh sách ứng viên theo job | `applications`, `application_history`, `job_snapshot` (read-model), `outbox` | `POST /applications`, `GET /applications/me`, `GET /jobs/{id}/applications` (HR), `PATCH /applications/{id}/status` |
 | **notification-service** | Lưu và đẩy thông báo realtime | `notifications` | `GET /notifications`, `PATCH /notifications/{id}/read`, WS `/ws` → `/user/queue/notifications` |
@@ -290,7 +290,7 @@ Description: <mô tả đã làm sạch HTML, cắt tối đa ~1.500 token>
 | `work_mode` | keyword | ✅ | `ONSITE` / `HYBRID` / `REMOTE` |
 | `industry` | keyword | ✅ | Ngành |
 | `level` | keyword | ✅ | `INTERN` … `MANAGER` |
-| `job_type` | keyword | ✅ | `FULL_TIME` / `PART_TIME` / `CONTRACT` |
+| `job_type` | keyword | ✅ | `FULL_TIME` / `PART_TIME` / `CONTRACT` / `INTERNSHIP` / `FREELANCE` |
 | `required_skills` | keyword[] | ✅ | Hard/soft match kỹ năng |
 | `nice_skills` | keyword[] | – | Điểm cộng |
 | `min_years_exp` | integer | ✅ | Kinh nghiệm tối thiểu |
@@ -303,7 +303,7 @@ Description: <mô tả đã làm sạch HTML, cắt tối đa ~1.500 token>
 | `job.created` | upsert point |
 | `job.updated` (sửa mô tả/skill) | re-embed + upsert |
 | `job.updated` (chỉ sửa metadata) | `set_payload`, không cần re-embed (tiết kiệm chi phí) |
-| `job.closed` / `job.expired` | `set_payload status=CLOSED` (giữ lại phục vụ đánh giá và thống kê) |
+| `job.closed` / `job.expired` | `set_payload status=CLOSED` (giữ lại phục vụ đánh giá và thống kê). Job-service chỉ có một trạng thái kết thúc là `CLOSED`; đóng tay hay hết hạn được phân biệt bằng event type |
 | `job.deleted` | delete point |
 
 **Scheduler đóng job hết hạn:** job-service chạy `@Scheduled(cron = "0 */5 * * * *")`, tìm `status=OPEN AND deadline < now()`, cập nhật thành `CLOSED` và phát `job.expired`. Đây chỉ là **lớp thứ hai**. Lớp thứ nhất là query lúc search luôn có filter `deadline_ts >= now`, nên dù scheduler chạy trễ thì job hết hạn vẫn không bao giờ được gợi ý.
@@ -792,11 +792,11 @@ Ngưỡng nằm ở `eval/thresholds.yaml`. Trong CI, Qdrant chạy bằng servi
 - **DoD:** Integration test (Testcontainers) cho toàn bộ luồng auth; Swagger chạy được.
 
 ### - [ ] Phase 2: Job service
-- [ ] CRUD job + validate, ownership check theo `companyId`
-- [ ] Tìm kiếm và lọc SQL (industry, location, salary, level, job_type, keyword full-text Postgres), phân trang
-- [ ] Transactional Outbox + relay publish `job.events`
-- [ ] Scheduler đóng job hết hạn và phát `job.expired`
-- **DoD:** Test outbox không mất event khi Kafka down; job quá hạn tự đóng.
+- [x] CRUD job + validate, ownership check theo `companyId` (service kiểm tra thêm role `HR`)
+- [ ] Tìm kiếm và lọc SQL (industry, location, salary, level, job_type, keyword full-text Postgres), phân trang. *Đã có: filter, keyword `LIKE` trên title/description/skill (index trigram), phân trang. Còn thiếu: filter `job_type`/`work_mode`, full-text thật (`tsvector`).*
+- [x] Transactional Outbox + relay publish `job.events` (envelope chuẩn từ `common-lib`, relay `SKIP LOCKED`, tự dọn outbox cũ)
+- [x] Scheduler đóng job hết hạn và phát `job.expired`
+- **DoD:** Test outbox không mất event khi Kafka down; job quá hạn tự đóng. *(đã có trong `JobServiceIntegrationTest`, chạy bằng Testcontainers)*
 
 ### - [ ] Phase 3: Candidate / CV service
 - [ ] CRUD CV dạng form (skills, kinh nghiệm, học vấn, mong muốn)
