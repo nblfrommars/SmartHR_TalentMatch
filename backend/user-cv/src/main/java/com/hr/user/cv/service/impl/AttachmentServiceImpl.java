@@ -4,6 +4,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,20 +24,28 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.http.Method;
-import lombok.RequiredArgsConstructor;
 
 @Service
-@RequiredArgsConstructor
 public class AttachmentServiceImpl implements AttachmentService {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
     private static final int URL_EXPIRY_SECONDS = 300;
 
     private final MinioClient minioClient;
+    private final MinioClient publicMinioClient;
     private final AttachmentRepository attachmentRepository;
 
     @Value("${minio.bucket}")
     private String bucket;
+
+    public AttachmentServiceImpl(
+            @Qualifier("minioClient") MinioClient minioClient,
+            @Qualifier("publicMinioClient") MinioClient publicMinioClient,
+            AttachmentRepository attachmentRepository) {
+        this.minioClient = minioClient;
+        this.publicMinioClient = publicMinioClient;
+        this.attachmentRepository = attachmentRepository;
+    }
 
     @Override
     @Transactional
@@ -78,7 +87,7 @@ public class AttachmentServiceImpl implements AttachmentService {
     public AttachmentUrlResponse createDownloadUrl(UUID userId, boolean admin, UUID attachmentId) {
         Attachment attachment = findAuthorized(userId, admin, attachmentId);
         try {
-            String url = minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+            String url = publicMinioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
                     .bucket(attachment.getBucket())
                     .object(attachment.getObjectKey())

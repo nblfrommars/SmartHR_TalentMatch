@@ -42,6 +42,11 @@ app:
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin123}
+  region: ${MINIO_REGION:us-east-1}
   bucket: ${MINIO_BUCKET:cv-files}
+
+job-service:
+  base-url: ${JOB_SERVICE_BASE_URL:http://localhost:8082}
