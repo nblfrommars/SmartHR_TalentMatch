@@ -9,14 +9,29 @@ import io.minio.MinioClient;
 @Configuration
 public class MinioConfig {
 
-    @Bean
+    @Bean("minioClient")
     MinioClient minioClient(
             @Value("${minio.endpoint}") String endpoint,
             @Value("${minio.access-key}") String accessKey,
-            @Value("${minio.secret-key}") String secretKey) {
+            @Value("${minio.secret-key}") String secretKey,
+            @Value("${minio.region:us-east-1}") String region) {
         return MinioClient.builder()
                 .endpoint(endpoint)
                 .credentials(accessKey, secretKey)
+                .region(region)
+                .build();
+    }
+
+    @Bean("publicMinioClient")
+    MinioClient publicMinioClient(
+            @Value("${minio.public-endpoint}") String endpoint,
+            @Value("${minio.access-key}") String accessKey,
+            @Value("${minio.secret-key}") String secretKey,
+            @Value("${minio.region:us-east-1}") String region) {
+        return MinioClient.builder()
+                .endpoint(endpoint)
+                .credentials(accessKey, secretKey)
+                .region(region)
                 .build();
     }
 }
