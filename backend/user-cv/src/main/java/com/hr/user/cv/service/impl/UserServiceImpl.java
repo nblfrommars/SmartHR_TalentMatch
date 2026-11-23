@@ -37,6 +37,7 @@ import com.hr.user.cv.integration.KeycloakAdminClient;
 import com.hr.user.cv.event.CVProfileEventPublisher;
 import com.hr.user.cv.event.CVProfileEventType;
 import com.hr.user.cv.event.CVProfileEventData;
+import com.hr.user.cv.event.CVProfileSkillEventData;
 import com.hr.user.cv.service.AttachmentService;
 
 import lombok.RequiredArgsConstructor;
@@ -221,7 +222,9 @@ public class UserServiceImpl implements UserService {
                 response.getSummary(),
                 response.getEduLevel(),
                 response.getEducation(),
-                response.getSkills());
+                response.getSkills().stream()
+                        .map(skill -> new CVProfileSkillEventData(skill.getSkill(), skill.getYearsOfExperience()))
+                        .toList());
     }
 
     private boolean hasCvData(CreateUserRequest req) {
@@ -242,10 +245,10 @@ public class UserServiceImpl implements UserService {
                             HttpStatus.NOT_FOUND, "Skill not found: " + item.getSkillId()));
         }
 
-        String title = item.getTitle();
+        String title = item.getSkill();
         if (title == null || title.isBlank()) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Each skill requires either skillId or title");
+                    HttpStatus.BAD_REQUEST, "Each skill requires either skillId or skill");
         }
 
         String normalizedTitle = title.trim().toLowerCase();

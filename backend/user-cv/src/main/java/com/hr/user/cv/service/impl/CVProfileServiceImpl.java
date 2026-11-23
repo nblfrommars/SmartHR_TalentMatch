@@ -25,6 +25,7 @@ import com.hr.user.cv.enums.UserRole;
 import com.hr.user.cv.event.CVProfileEventPublisher;
 import com.hr.user.cv.event.CVProfileEventType;
 import com.hr.user.cv.event.CVProfileEventData;
+import com.hr.user.cv.event.CVProfileSkillEventData;
 import com.hr.user.cv.service.AttachmentService;
 import com.hr.user.cv.repository.CVProfileRepository;
 import com.hr.user.cv.repository.AttachmentRepository;
@@ -95,7 +96,9 @@ public class CVProfileServiceImpl {
                 response.getSummary(),
                 response.getEduLevel(),
                 response.getEducation(),
-                response.getSkills());
+                response.getSkills().stream()
+                        .map(skill -> new CVProfileSkillEventData(skill.getSkill(), skill.getYearsOfExperience()))
+                        .toList());
     }
 
     @Transactional
@@ -156,10 +159,10 @@ public class CVProfileServiceImpl {
             return skillRepository.findById(item.getSkillId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Skill not found"));
         }
-        if (item.getTitle() == null || item.getTitle().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Each skill requires skillId or title");
+        if (item.getSkill() == null || item.getSkill().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Each skill requires skillId or skill");
         }
-        String title = item.getTitle().trim();
+        String title = item.getSkill().trim();
         String normalizedTitle = title.toLowerCase();
         return skillRepository.findByNormalizedTitle(normalizedTitle)
                 .orElseGet(() -> {

@@ -3,7 +3,6 @@ package com.hr.user.cv.event;
 import java.util.List;
 import java.util.UUID;
 
-import com.hr.user.cv.dto.response.CVSkillResponse;
 import com.hr.user.cv.enums.EduLevel;
 
 public record CVProfileEventData(
@@ -15,5 +14,5 @@ public record CVProfileEventData(
         String summary,
         EduLevel eduLevel,
         String education,
-        List<CVSkillResponse> skills) {
+        List<CVProfileSkillEventData> skills) {
 }
