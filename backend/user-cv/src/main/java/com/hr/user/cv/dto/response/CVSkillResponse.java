@@ -7,6 +7,6 @@ import lombok.Data;
 @AllArgsConstructor
 public class CVSkillResponse {
     private Long skillId;
-    private String title;
+    private String skill;
     private Integer yearsOfExperience;
 }
