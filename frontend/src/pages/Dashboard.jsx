@@ -1,20 +1,9 @@
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import Icon from "../components/Icon";
 
 export default function Dashboard() {
   const { logout } = useAuth();
-
-  return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50 p-8 text-slate-900">
-      <div className="mx-auto flex max-w-5xl items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-600">SmartHR</p>
-          <h1 className="mt-2 text-3xl font-bold">Dashboard</h1>
-        </div>
-        <button onClick={logout} className="button">Đăng xuất</button>
-      </div>
-      <section className="mx-auto mt-12 max-w-5xl rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-lg shadow-cyan-100">
-        <p className="text-xl font-medium text-slate-600">Đang hoàn thiện</p>
-      </section>
-    </main>
-  );
+  const displayName = "bạn";
+  return <div className="app-shell"><header className="site-header"><div className="header-inner"><Link to="/" className="brand"><span className="brand-mark"><Icon name="briefcase" /></span>TalentMatch</Link><nav className="header-nav"><Link to="/dashboard" className="active">Dashboard</Link><Link to="/profile">Hồ sơ của tôi</Link><Link to="/jobs">Việc làm</Link></nav><div className="header-actions"><span className="user-chip">Ứng viên · {displayName}</span><button className="btn btn-outline" onClick={logout}>Đăng xuất</button></div></div></header><div className="dashboard"><aside className="sidebar"><p className="sidebar-label">Không gian của bạn</p><Link to="/dashboard" className="side-link active"><Icon name="layout" /> Tổng quan</Link><Link to="/profile" className="side-link"><Icon name="user" /> Hồ sơ của tôi</Link><Link to="/jobs" className="side-link"><Icon name="briefcase" /> Việc làm</Link><button className="side-link"><Icon name="file" /> Hồ sơ đã nộp</button><p className="sidebar-label" style={{ marginTop: 28 }}>Khám phá</p><button className="side-link"><Icon name="spark" /> Gợi ý cho bạn</button><button className="side-link"><Icon name="map" /> Địa điểm</button></aside><main className="dashboard-main"><div className="dashboard-top"><div><p>Chào mừng trở lại</p><h1>Dashboard<span>.</span></h1><p>Theo dõi hành trình tìm việc của bạn tại đây.</p></div><Link to="/profile" className="btn btn-primary"><Icon name="user" /> Hoàn thiện hồ sơ</Link></div><div className="stats"><div className="stat"><small>Độ hoàn thiện hồ sơ</small><strong>68%</strong></div><div className="stat"><small>Việc làm phù hợp</small><strong>12</strong></div><div className="stat"><small>Hồ sơ đã nộp</small><strong>0</strong></div></div><div className="panel" style={{ marginBottom: 22 }}><h2>Tiến độ hồ sơ</h2><div className="progress-track"><div className="progress-value" /></div><p style={{ margin: 0, color: "#71717a", fontSize: 14 }}>Thêm CV, vị trí mong muốn và kỹ năng để nhận đề xuất tốt hơn.</p><Link to="/profile" className="btn btn-yellow" style={{ marginTop: 18 }}>Cập nhật ngay</Link></div><div className="panel"><div className="section-heading" style={{ marginBottom: 0 }}><div><p>Mock data — chờ job-service</p><h2>Hoạt động gần đây</h2></div><Icon name="chart" /></div><div className="notice">Tính năng việc làm, ứng tuyển và đề xuất đang được dựng giao diện trước. Khi job-service có API, phần mock này sẽ được thay bằng dữ liệu thật.</div></div></main></div></div>;
 }
