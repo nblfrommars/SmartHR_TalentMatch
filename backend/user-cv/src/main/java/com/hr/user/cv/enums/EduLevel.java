@@ -41,6 +41,12 @@ public enum EduLevel {
             return fromValue(n.intValue());
         }
         String s = input.toString().trim();
+        if ("BACHELOR".equalsIgnoreCase(s)) {
+            return COLLEGE;
+        }
+        if ("MASTER".equalsIgnoreCase(s)) {
+            return POSTGRADUATE;
+        }
         return Stream.of(values())
                 .filter(r -> r.name().equalsIgnoreCase(s) || r.label.equalsIgnoreCase(s))
                 .findFirst()
@@ -48,7 +54,7 @@ public enum EduLevel {
                     try {
                         return fromValue(Integer.parseInt(s));
                     } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Unknown SkillStaus: " + input);
+                        throw new IllegalArgumentException("Unknown EduLevel: " + input);
                     }
                 });
     }
@@ -57,6 +63,6 @@ public enum EduLevel {
         return Stream.of(values())
                 .filter(r -> r.value == value)
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown SkillStatus value: " + value));
+                .orElseThrow(() -> new IllegalArgumentException("Unknown EduLevel value: " + value));
     }
 }

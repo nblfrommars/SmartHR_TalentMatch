@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.enums.Gender;
 @Entity
 @Getter
 @Setter
@@ -33,6 +34,10 @@ public class User{
     @Column(name = "dob")
     private Date dob;
 
+    @Column(name = "gender")
+    @Enumerated(EnumType.STRING)
+    private Gender gender = Gender.NOINFO;
+
     @Column(name = "is_active")
     private boolean isActive;
 
@@ -54,6 +59,16 @@ public class User{
     void prepare() {
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (gender == null) {
+            gender = Gender.NOINFO;
+        }
+    }
+
+    @PostLoad
+    void applyGenderDefault() {
+        if (gender == null) {
+            gender = Gender.NOINFO;
         }
     }
 }

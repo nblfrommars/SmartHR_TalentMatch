@@ -22,14 +22,23 @@ import com.hr.user.cv.entity.HRProfile;
 import com.hr.user.cv.entity.CVProfile;
 import com.hr.user.cv.entity.Skill;
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.enums.Gender;
 import com.hr.user.cv.enums.SkillStatus;
 import com.hr.user.cv.dto.request.CreateUserRequest;
 import com.hr.user.cv.dto.request.RegisterUserRequest;
 import com.hr.user.cv.dto.request.CVSkillRequest;
 import com.hr.user.cv.dto.response.UserResponse;
 import com.hr.user.cv.dto.response.UserContextResponse;
+import com.hr.user.cv.dto.response.CVDetailResponse;
+import com.hr.user.cv.dto.response.CVSkillResponse;
+import com.hr.user.cv.dto.response.AttachmentUrlResponse;
 import com.hr.user.cv.mapper.UserMapper;
 import com.hr.user.cv.integration.KeycloakAdminClient;
+import com.hr.user.cv.event.CVProfileEventPublisher;
+import com.hr.user.cv.event.CVProfileEventType;
+import com.hr.user.cv.event.CVProfileEventData;
+import com.hr.user.cv.event.CVProfileSkillEventData;
+import com.hr.user.cv.service.AttachmentService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -44,6 +53,8 @@ public class UserServiceImpl implements UserService {
     private final SkillRepository skillRepository;
     private final UserMapper userMapper;
     private final KeycloakAdminClient keycloakAdminClient;
+    private final CVProfileEventPublisher eventPublisher;
+    private final AttachmentService attachmentService;
 
     @Override
     @Transactional(readOnly = true)
@@ -104,6 +115,7 @@ public class UserServiceImpl implements UserService {
         user.setEmail(req.getEmail().trim());
         user.setFullName(req.getFullName());
         user.setDob(req.getDob());
+        user.setGender(req.getGender() == null ? Gender.NOINFO : req.getGender());
         user.setRole(req.getRole());
         user.setActive(true);
         user.setDeleted(false);
@@ -173,7 +185,46 @@ public class UserServiceImpl implements UserService {
         }
         skillById.forEach((id, skill) -> profile.addSkill(skill, yearsBySkillId.get(id)));
 
-        cvProfileRepository.save(profile);
+        CVProfile saved = cvProfileRepository.save(profile);
+        eventPublisher.publish(CVProfileEventType.CREATED, userId, toEventData(toCVResponse(saved)));
+    }
+
+    private CVDetailResponse toCVResponse(CVProfile profile) {
+        CVDetailResponse response = new CVDetailResponse();
+        response.setUserId(profile.getUserId());
+        response.setPositionId(profile.getPositionId());
+        response.setWorkLocationId(profile.getWorkLocationId());
+        response.setImageAttachmentId(profile.getImageAttachmentId());
+        response.setCvAttachmentId(profile.getCvAttachmentId());
+        response.setSummary(profile.getSummary());
+        response.setEduLevel(profile.getEduLevel());
+        response.setEducation(profile.getEducation());
+        response.setSkills(profile.getSkills().stream()
+                .map(item -> new CVSkillResponse(item.getSkill().getId(), item.getSkill().getTitle(),
+                        item.getYearsOfExperience()))
+                .toList());
+        return response;
+    }
+
+    private CVProfileEventData toEventData(CVDetailResponse response) {
+        String cvAttachmentUrl = null;
+        if (response.getCvAttachmentId() != null) {
+            AttachmentUrlResponse urlResponse = attachmentService.createInternalDownloadUrl(
+                    response.getUserId(), response.getCvAttachmentId());
+            cvAttachmentUrl = urlResponse.getUrl();
+        }
+        return new CVProfileEventData(
+                response.getUserId(),
+                response.getPositionId(),
+                response.getWorkLocationId(),
+                response.getCvAttachmentId(),
+                cvAttachmentUrl,
+                response.getSummary(),
+                response.getEduLevel(),
+                response.getEducation(),
+                response.getSkills().stream()
+                        .map(skill -> new CVProfileSkillEventData(skill.getSkill(), skill.getYearsOfExperience()))
+                        .toList());
     }
 
     private boolean hasCvData(CreateUserRequest req) {
@@ -194,10 +245,10 @@ public class UserServiceImpl implements UserService {
                             HttpStatus.NOT_FOUND, "Skill not found: " + item.getSkillId()));
         }
 
-        String title = item.getTitle();
+        String title = item.getSkill();
         if (title == null || title.isBlank()) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Each skill requires either skillId or title");
+                    HttpStatus.BAD_REQUEST, "Each skill requires either skillId or skill");
         }
 
         String normalizedTitle = title.trim().toLowerCase();
