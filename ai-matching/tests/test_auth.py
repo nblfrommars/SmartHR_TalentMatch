@@ -100,3 +100,16 @@ async def test_require_identity_blocks_calls_without_headers(http, monkeypatch):
         assert (await recs(http, ALICE, as_user(ALICE, "USER"))).status_code == 200
     finally:
         get_settings.cache_clear()
+
+
+async def test_empty_user_id_from_gateway_is_401_not_internal(http):
+    """Gateway gắn X-User-Id rỗng khi token không có `sub`: không được coi là gọi nội bộ."""
+    response = await recs(http, BOB, {"X-User-Id": "", "X-User-Role": ""})
+    assert response.status_code == 401
+    assert (await recs(http, BOB, {"X-User-Id": "  ", "X-User-Role": "ADMIN"})).status_code == 401
+
+
+async def test_token_without_sub_through_gateway_is_401(http):
+    """Token không có `sub`: gateway bỏ hẳn X-User-Id nhưng vẫn gắn X-User-Role (rỗng)."""
+    assert (await recs(http, BOB, {"X-User-Role": ""})).status_code == 401
+    assert (await recs(http, BOB, {"X-User-Role": "ADMIN"})).status_code == 401
