@@ -39,6 +39,10 @@ public class JobApplication {
     @Column(name = "applicant_id", nullable = false)
     private UUID applicantId;
 
+    // Snapshot of the CV file selected when the application was submitted.
+    @Column(name = "cv_attachment_id")
+    private UUID cvAttachmentId;
+
     @Column(name = "cover_letter", columnDefinition = "TEXT")
     private String coverLetter;
 
