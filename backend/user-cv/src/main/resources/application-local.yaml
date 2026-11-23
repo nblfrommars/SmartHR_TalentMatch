@@ -27,6 +27,7 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8180/realms/smarthr}
+          jwk-set-uri: ${AUTH_JWK_SET_URI:http://localhost:8180/realms/smarthr/protocol/openid-connect/certs}
 
 keycloak:
   admin:

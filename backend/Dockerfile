@@ -3,7 +3,8 @@ ARG SERVICE=job-service
 WORKDIR /src
 COPY pom.xml .
 COPY common-lib common-lib
-COPY ${SERVICE} ${SERVICE}
+COPY job-service job-service
+COPY user-cv user-cv
 RUN mvn -B -ntp -pl ${SERVICE} -am package -DskipTests
 
 FROM eclipse-temurin:21-jre
