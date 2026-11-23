@@ -10,15 +10,15 @@ export async function apiRequest(path, options = {}, getToken) {
 }
 
 export const userApi = {
-  context: (getToken) => apiRequest("/api/users/me/context", {}, getToken),
-  cv: (getToken) => apiRequest("/api/cvs/me", {}, getToken),
-  positions: (getToken) => apiRequest("/api/positions", {}, getToken),
-  locations: (getToken) => apiRequest("/api/locations", {}, getToken),
-  saveCv: (body, getToken) => apiRequest("/api/cvs/me", { method: "PUT", body: JSON.stringify(body) }, getToken),
-  createCv: (body, getToken) => apiRequest("/api/cvs", { method: "POST", body: JSON.stringify(body) }, getToken),
+  context: (getToken) => apiRequest("/api/v1/users/me/context", {}, getToken),
+  cv: (getToken) => apiRequest("/api/v1/cvs/me", {}, getToken),
+  positions: (getToken) => apiRequest("/api/v1/positions", {}, getToken),
+  locations: (getToken) => apiRequest("/api/v1/locations", {}, getToken),
+  saveCv: (body, getToken) => apiRequest("/api/v1/cvs/me", { method: "PUT", body: JSON.stringify(body) }, getToken),
+  createCv: (body, getToken) => apiRequest("/api/v1/cvs", { method: "POST", body: JSON.stringify(body) }, getToken),
   upload: (file, getToken) => {
     const data = new FormData();
     data.append("file", file);
-    return apiRequest("/api/attachments", { method: "POST", body: data }, getToken);
+    return apiRequest("/api/v1/attachments", { method: "POST", body: data }, getToken);
   },
 };

@@ -15,6 +15,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -39,9 +40,16 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException.class,
             MissingRequestHeaderException.class,
             MissingServletRequestParameterException.class,
-            MethodArgumentTypeMismatchException.class})
+            MethodArgumentTypeMismatchException.class,
+            MaxUploadSizeExceededException.class})
     public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex, HttpServletRequest req) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req, List.of());
+        HttpStatus status = ex instanceof MaxUploadSizeExceededException
+                ? HttpStatus.PAYLOAD_TOO_LARGE
+                : HttpStatus.BAD_REQUEST;
+        String message = ex instanceof MaxUploadSizeExceededException
+                ? "File size must not exceed 5 MB"
+                : ex.getMessage();
+        return build(status, message, req, List.of());
     }
 
     @ExceptionHandler(ResponseStatusException.class)

@@ -21,6 +21,7 @@ import com.hr.user.cv.dto.request.CreateUserRequest;
 import com.hr.user.cv.dto.response.UserResponse;
 import com.hr.user.cv.entity.User;
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.enums.Gender;
 import com.hr.user.cv.mapper.UserMapperImpl;
 import com.hr.user.cv.service.UserService;
 
@@ -38,17 +39,19 @@ class UserControllerTest {
         user.setUserName("alice");
         user.setFullName("Alice Nguyen");
         user.setDob(new Date(0));
+        user.setGender(Gender.FEMALE);
         user.setRole(UserRole.APPLICANT);
         user.setActive(true);
 
         when(userService.getAll()).thenReturn(List.of(user));
 
-        mockMvc.perform(get("/api/users"))
+        mockMvc.perform(get("/api/v1/users"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("00000000-0000-0000-0000-000000000001"))
                 .andExpect(jsonPath("$[0].userName").value("alice"))
                 .andExpect(jsonPath("$[0].fullName").value("Alice Nguyen"))
                 .andExpect(jsonPath("$[0].role").value("USER"))
+                .andExpect(jsonPath("$[0].gender").value("FEMALE"))
                 .andExpect(jsonPath("$[0].active").value(true));
     }
 
@@ -60,7 +63,7 @@ class UserControllerTest {
         response.setRole(UserRole.HR);
         when(userService.save(any(CreateUserRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/users")
+        mockMvc.perform(post("/api/v1/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userName\":\"bob\",\"role\":2,\"companyId\":\"00000000-0000-0000-0000-000000000001\"}"))
                 .andExpect(status().isCreated())

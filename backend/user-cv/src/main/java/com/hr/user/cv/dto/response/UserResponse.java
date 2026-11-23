@@ -4,6 +4,7 @@ import java.util.Date;
 import java.util.UUID;
 
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.enums.Gender;
 
 import lombok.Data;
 
@@ -13,6 +14,7 @@ public class UserResponse {
     private String userName;
     private String fullName;
     private Date dob;
+    private Gender gender;
     private UserRole role;
     private UUID companyId;
     private boolean active;

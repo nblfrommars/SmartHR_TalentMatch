@@ -34,7 +34,7 @@ export default function Register() {
       role: form.role,
     };
     try {
-      const response = await fetch("/api/users/register", {
+      const response = await fetch("/api/v1/users/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

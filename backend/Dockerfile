@@ -5,6 +5,7 @@ COPY pom.xml .
 COPY common-lib common-lib
 COPY job-service job-service
 COPY user-cv user-cv
+COPY api-gateway api-gateway
 RUN mvn -B -ntp -pl ${SERVICE} -am package -DskipTests
 
 FROM eclipse-temurin:21-jre

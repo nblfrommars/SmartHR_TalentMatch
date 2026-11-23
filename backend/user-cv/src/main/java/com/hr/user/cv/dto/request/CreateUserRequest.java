@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.hr.user.cv.enums.EduLevel;
 import com.hr.user.cv.enums.UserRole;
+import com.hr.user.cv.enums.Gender;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,6 +23,7 @@ public class CreateUserRequest {
     private String fullName;
     private String email;
     private Date dob;
+    private Gender gender = Gender.NOINFO;
     @NotNull
     private UserRole role;
 

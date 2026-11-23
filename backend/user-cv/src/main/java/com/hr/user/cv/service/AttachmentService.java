@@ -12,5 +12,7 @@ public interface AttachmentService {
 
     AttachmentUrlResponse createDownloadUrl(UUID userId, boolean admin, UUID attachmentId);
 
+    AttachmentUrlResponse createInternalDownloadUrl(UUID userId, UUID attachmentId);
+
     void delete(UUID userId, boolean admin, UUID attachmentId);
 }

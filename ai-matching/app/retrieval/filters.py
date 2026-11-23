@@ -22,6 +22,8 @@ def job_filter(
     industries: Sequence[str] | None = None,
     salary_min: int | None = None,
     exclude_job_ids: Sequence[str] | None = None,
+    location_ids: Sequence[str] | None = None,
+    industry_ids: Sequence[str] | None = None,
 ) -> qm.Filter:
     must: list[qm.Condition] = [
         qm.FieldCondition(key="status", match=qm.MatchValue(value="OPEN")),
@@ -34,6 +36,11 @@ def job_filter(
         must.append(qm.FieldCondition(key="job_type", match=qm.MatchValue(value=job_type.value)))
     if inds := _keywords(industries):
         must.append(qm.FieldCondition(key="industry", match=qm.MatchAny(any=inds)))
+    # Lọc theo id (khuyến nghị cho FE, lấy từ /api/v1/locations và /api/v1/industries).
+    # location_ids của job gồm id của nó và id cấp cha, nên chọn tỉnh ra được cả job ở quận.
+    for key, ids in (("location_ids", location_ids), ("industry_ids", industry_ids)):
+        if ids:
+            must.append(qm.FieldCondition(key=key, match=qm.MatchAny(any=list(ids))))
     if salary_min is not None:
         # Khoảng lương giao nhau; job "thỏa thuận" (không có salary_max) vẫn được giữ
         must.append(

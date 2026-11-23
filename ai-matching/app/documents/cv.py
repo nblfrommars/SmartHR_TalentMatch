@@ -34,6 +34,7 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
     majors = [clean_text(e.major) for e in cv.education if e.major]
     certifications = normalizer.normalize_many(cv.certifications)
     headline = clean_text(cv.headline)
+    summary = clean_text(cv.summary, max_chars=settings.document_max_chars)
 
     experience_lines = [line for line in (_experience_line(e) for e in cv.experiences) if line]
     experience_block = truncate("\n".join(experience_lines), settings.document_max_chars)
@@ -43,6 +44,7 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
     dense_text = compact_lines(
         [
             labeled_line("Headline", headline),
+            labeled_line("Summary", summary),
             joined_line(
                 labeled_line("Level", cv.level),
                 _years_label(cv.years_experience),
@@ -61,6 +63,7 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
         skill_tokens(certifications),
         segment_all([headline]),
         segment_all(majors),
+        segment_all([summary]),
     )
 
     payload = {
@@ -81,6 +84,9 @@ def build_cv_document(cv: CvSnapshot) -> IndexDocument:
         "desired_locations": [
             loc for loc in (normalize_keyword(x) for x in cv.desired.locations) if loc
         ],
+        "edu_level": cv.edu_level,
+        "position_id": cv.position_id,
+        "work_location_id": cv.work_location_id,
         "updated_ts": to_utc_iso(cv.updated_at),
         "version": cv.version,
         "embedding_version": settings.embedding_version,

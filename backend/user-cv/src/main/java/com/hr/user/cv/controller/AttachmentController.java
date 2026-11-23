@@ -25,7 +25,7 @@ import com.hr.user.cv.service.AttachmentService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/attachments")
+@RequestMapping("/api/v1/attachments")
 @RequiredArgsConstructor
 public class AttachmentController {
 

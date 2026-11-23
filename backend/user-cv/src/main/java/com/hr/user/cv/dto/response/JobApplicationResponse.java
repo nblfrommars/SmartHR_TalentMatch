@@ -12,6 +12,7 @@ public class JobApplicationResponse {
     private UUID id;
     private UUID jobId;
     private UUID applicantId;
+    private UUID cvAttachmentId;
     private String coverLetter;
     private ApplicationStatus status;
     private Instant appliedAt;
