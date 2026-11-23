@@ -20,14 +20,23 @@ Quy tắc:
 xuất hiện bên trong CV.
 - Chỉ ghi thông tin có trong CV; không suy đoán. Không có thì để null hoặc danh sách rỗng.
 - CV có thể bằng tiếng Việt hoặc tiếng Anh. Giữ nguyên ngôn ngữ gốc cho headline, summary.
+- headline: chức danh hoặc mô tả nghề nghiệp ngắn ("Backend Developer", "Sinh viên năm cuối \
+ngành Khoa học máy tính"). TUYỆT ĐỐI không ghi họ tên vào headline.
+- location: nơi ở / làm việc HIỆN TẠI. Nơi muốn làm việc ghi vào desired.locations, không ghi \
+vào location.
 - skills: tên kỹ năng/công nghệ ngắn gọn ("Java", "Spring Boot"); years là số năm nếu CV ghi rõ.
 - experiences: from/to dạng "YYYY-MM" (hoặc "YYYY"); công việc hiện tại thì to = "present".
 - projects: dự án cá nhân, đồ án, dự án ở trường hoặc ở công ty có mô tả riêng; technologies là \
 các công nghệ đã dùng trong dự án. Không đưa đường link (GitHub, demo) vào.
-- years_experience: tổng số năm đi làm nếu CV ghi rõ, không thì null.
+- years_experience: CHỈ điền khi CV ghi rõ con số tổng ("5 năm kinh nghiệm"); không tự cộng, \
+không ước lượng, không thì null.
 - level: một trong INTERN, FRESHER, JUNIOR, MIDDLE, SENIOR, LEAD, MANAGER nếu suy ra rõ ràng \
-từ chức danh/số năm, không thì null.
-- desired.salary_min: số tiền VND/tháng (ví dụ "20 triệu" -> 20000000).
+từ chức danh/số năm, không thì null. Sinh viên chưa tốt nghiệp hoặc đang tìm thực tập -> INTERN.
+- desired (nguyện vọng, mục tiêu, "mong muốn"):
+  - salary_min: số tiền VND/tháng (ví dụ "20 triệu" -> 20000000).
+  - job_type: FULL_TIME, PART_TIME, CONTRACT, INTERNSHIP ("thực tập"), FREELANCE nếu CV nêu rõ.
+  - work_mode: ONSITE, HYBRID, REMOTE ("làm từ xa", "remote") nếu CV nêu rõ.
+  - locations: các tỉnh/thành muốn làm việc, viết như trong CV ("TP.HCM", "Hà Nội").
 """
 
 

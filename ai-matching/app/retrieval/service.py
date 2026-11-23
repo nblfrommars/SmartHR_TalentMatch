@@ -149,15 +149,27 @@ class Recommender:
         limit: int = 20,
         now: datetime | None = None,
     ) -> list[Match]:
-        now = now or datetime.now(UTC)
         job = await self._source(Kind.JOB, job_id)
-        hits = await self._hybrid(Kind.CV, job, candidate_filter)
+        return await self.search_candidates_for(job, candidate_filter, limit, now)
+
+    async def search_candidates_for(
+        self,
+        source: PointData,
+        candidate_filter: qm.Filter,
+        limit: int = 20,
+        now: datetime | None = None,
+    ) -> list[Match]:
+        """Tìm ứng viên cho một "job" bất kỳ: job đã index, hoặc yêu cầu dựng từ câu hỏi tự do
+        của HR (payload có required_skills, must_have_skills, level, min_years_exp).
+        """
+        now = now or datetime.now(UTC)
+        hits = await self._hybrid(Kind.CV, source, candidate_filter)
 
         matches = []
         for hit, hybrid in zip(hits, min_max([h.score for h in hits]), strict=True):
             cv = hit.payload or {}
             breakdown, skills = score_pair(
-                job.payload, cv, hybrid, now, self.config, recency_ts=cv.get("updated_ts")
+                source.payload, cv, hybrid, now, self.config, recency_ts=cv.get("updated_ts")
             )
             if passes_hard_rules(breakdown, skills, self.config):
                 matches.append(

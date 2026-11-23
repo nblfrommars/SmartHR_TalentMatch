@@ -5,6 +5,8 @@ Bản LLM (gpt-4o-mini) ở bước sau chỉ viết lại match_summary cho t�
 missing_skills luôn do code tính.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from app.retrieval.scoring import Breakdown, SkillMatch
@@ -16,6 +18,8 @@ class Explanation(BaseModel):
     missing_skills: list[str]
     nice_to_have_matched: list[str]
     suggestion: str | None = None
+    # "llm": match_summary / suggestion do LLM viết lại; các danh sách skill luôn do code tính
+    source: Literal["template", "llm"] = "template"
 
 
 def _skill_sentence(subject: str, skills: SkillMatch) -> str:
