@@ -10,7 +10,7 @@ from app.core.container import Container, build_container
 from app.embedding import CachedDenseEmbedder, HashingEmbedder, InMemoryEmbeddingCache
 from app.ingestion.events import CvEvent, JobEvent, RedisProcessedEvents
 from app.vectorstore import Kind, point_id
-from tests.factories import job_envelope, make_cv, make_job_res
+from tests.factories import USER_ID, cv_envelope, job_envelope, make_cv_profile, make_job_res
 
 
 class CountingEmbedder(HashingEmbedder):
@@ -144,33 +144,46 @@ def test_job_event_validation():
 
 async def test_cv_lifecycle(container: Container):
     store, events = container.store, container.events
-    snapshot = make_cv("cv-1", searchable=False).model_dump(by_alias=True)
 
-    await events.handle_cv(
-        CvEvent.model_validate(
-            {"eventId": "e1", "type": "saved", "cvId": "cv-1", "snapshot": snapshot}
+    created = CvEvent.model_validate(cv_envelope("cv_profile.created", make_cv_profile()))
+    assert await events.handle_cv(created) is True
+    assert await events.handle_cv(created) is False  # giao lại: bỏ qua
+    point = await store.get(Kind.CV, USER_ID)
+    assert point.payload["cv_id"] == point.payload["user_id"] == USER_ID
+    assert point.payload["years_experience"] == 4
+    assert point.payload["searchable"] is False  # mặc định bảo vệ dữ liệu cá nhân
+
+    updated = make_cv_profile(skills=[{"skill": "Golang", "yearsOfExperience": 1}])
+    await events.handle_cv(CvEvent.model_validate(cv_envelope("cv_profile.updated", updated)))
+    point = await store.get(Kind.CV, USER_ID)
+    assert point.payload["skills"] == ["golang"]
+    assert await store.count(Kind.CV) == 1  # một User một CV: ghi đè, không tạo thêm
+
+
+async def test_cv_searchable_default_from_config():
+    c = await build_container(
+        Settings(
+            qdrant_url=":memory:",
+            embedding_provider="hashing",
+            embedding_dimension=64,
+            cv_searchable_default=True,
         )
     )
-    assert (await store.get(Kind.CV, "cv-1")).payload["searchable"] is False
-
-    await events.handle_cv(
-        CvEvent.model_validate(
-            {"eventId": "e2", "type": "visibility_changed", "cvId": "cv-1", "searchable": True}
-        )
-    )
-    assert (await store.get(Kind.CV, "cv-1")).payload["searchable"] is True
-
-    await events.handle_cv(
-        CvEvent.model_validate({"eventId": "e3", "type": "deleted", "cvId": "cv-1"})
-    )
-    assert await store.get(Kind.CV, "cv-1") is None
+    try:
+        event = CvEvent.model_validate(cv_envelope("cv_profile.created", make_cv_profile()))
+        await c.events.handle_cv(event)
+        assert (await c.store.get(Kind.CV, USER_ID)).payload["searchable"] is True
+    finally:
+        await c.close()
 
 
 def test_cv_event_validation():
-    with pytest.raises(ValidationError, match="snapshot"):
-        CvEvent.model_validate({"eventId": "e", "type": "saved", "cvId": "c"})
-    with pytest.raises(ValidationError, match="searchable"):
-        CvEvent.model_validate({"eventId": "e", "type": "visibility_changed", "cvId": "c"})
+    with pytest.raises(ValidationError, match="data"):
+        CvEvent.model_validate({"eventId": "e", "type": "cv_profile.created"})
+    with pytest.raises(ValidationError):  # type kiểu bản nháp cũ
+        CvEvent.model_validate(cv_envelope("cv.saved", make_cv_profile()))
+    with pytest.raises(ValidationError):  # eduLevel ngoài 0..7
+        CvEvent.model_validate(cv_envelope("cv_profile.created", make_cv_profile(eduLevel=9)))
 
 
 async def test_redis_processed_events():

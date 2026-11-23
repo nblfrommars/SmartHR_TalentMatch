@@ -6,21 +6,24 @@ Kafka consumer chỉ cần parse value của message thành `JobEvent` rồi g�
 Handler idempotent: event đã xử lý (theo eventId) bị bỏ qua, vì Kafka giao "ít nhất một lần" nên
 một event có thể đến nhiều lần. Event cũ đến muộn (data.version nhỏ hơn bản đang index) cũng bị bỏ.
 
-CvEvent vẫn là bản nháp, chờ candidate-service chốt định dạng (dự kiến cũng dùng EventEnvelope).
+CV event dùng đúng định dạng của user-cv: `EventEnvelope` với `data` là `CvProfileData`
+(topic `cv.profile.events`, key = userId).
 """
 
 import logging
 from enum import StrEnum
-from typing import Protocol, Self
+from typing import Protocol
 
-from pydantic import model_validator
 from redis.asyncio import Redis
 
 from app.ingestion.indexer import Indexer
-from app.schemas import CvSnapshot, EventEnvelope, JobRes, JobStatus
-from app.schemas.common import CamelModel
+from app.schemas import CvProfileData, EventEnvelope, JobRes, JobStatus
 
 logger = logging.getLogger(__name__)
+
+# Topic Kafka (dùng cho consumer)
+JOB_TOPIC = "job.events"
+CV_TOPIC = "cv.profile.events"
 
 
 class JobEventType(StrEnum):
@@ -34,9 +37,10 @@ class JobEventType(StrEnum):
 
 
 class CvEventType(StrEnum):
-    SAVED = "saved"
-    DELETED = "deleted"
-    VISIBILITY_CHANGED = "visibility_changed"
+    """Giá trị `type` trong envelope, khớp CVProfileEventType.java của user-cv."""
+
+    CREATED = "cv_profile.created"
+    UPDATED = "cv_profile.updated"
 
 
 class JobEvent(EventEnvelope[JobRes]):
@@ -49,20 +53,14 @@ class JobEvent(EventEnvelope[JobRes]):
         return self.data.id
 
 
-class CvEvent(CamelModel):
-    event_id: str
-    type: CvEventType
-    cv_id: str
-    snapshot: CvSnapshot | None = None
-    searchable: bool | None = None
+class CvEvent(EventEnvelope[CvProfileData]):
+    """Message trên topic `cv.profile.events`. created/updated đều kèm CV profile đầy đủ."""
 
-    @model_validator(mode="after")
-    def _check_fields(self) -> Self:
-        if self.type == CvEventType.SAVED and self.snapshot is None:
-            raise ValueError("cv.saved phải có snapshot")
-        if self.type == CvEventType.VISIBILITY_CHANGED and self.searchable is None:
-            raise ValueError("cv.visibility_changed phải có searchable")
-        return self
+    type: CvEventType
+
+    @property
+    def cv_id(self) -> str:
+        return self.data.user_id
 
 
 class ProcessedEvents(Protocol):
@@ -95,9 +93,13 @@ class RedisProcessedEvents:
 
 
 class EventHandler:
-    def __init__(self, indexer: Indexer, processed: ProcessedEvents) -> None:
+    def __init__(
+        self, indexer: Indexer, processed: ProcessedEvents, cv_searchable_default: bool = False
+    ) -> None:
         self.indexer = indexer
         self.processed = processed
+        # user-cv chưa có cờ "cho phép HR tìm kiếm" nên dùng giá trị cấu hình cho mọi CV
+        self.cv_searchable_default = cv_searchable_default
 
     async def handle_job(self, event: JobEvent) -> bool:
         """Trả về False nếu event đã xử lý trước đó (bị bỏ qua)."""
@@ -139,17 +141,12 @@ class EventHandler:
             logger.info("Bỏ qua event trùng %s", event.event_id)
             return False
 
-        match event.type:
-            case CvEventType.SAVED:
-                assert event.snapshot is not None
-                await self.indexer.index_cvs([event.snapshot])
-            case CvEventType.VISIBILITY_CHANGED:
-                assert event.searchable is not None
-                await self.indexer.set_cv_searchable(event.cv_id, event.searchable)
-            case CvEventType.DELETED:
-                # "Right to be forgotten": xóa hẳn khỏi Qdrant
-                await self.indexer.delete_cv(event.cv_id)
+        # created và updated đều gửi CV đầy đủ nên upsert lại toàn bộ
+        snapshot = event.data.to_snapshot(
+            updated_at=event.occurred_at, searchable=self.cv_searchable_default
+        )
+        await self.indexer.index_cvs([snapshot])
 
         await self.processed.mark(event.event_id)
-        logger.info("Đã xử lý cv.%s cv_id=%s", event.type, event.cv_id)
+        logger.info("Đã xử lý %s cv_id=%s", event.type, event.cv_id)
         return True

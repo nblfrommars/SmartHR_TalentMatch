@@ -39,7 +39,7 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
   uv run uvicorn app.main:app --port 8000
 ```
 
-Nạp job/CV qua `POST /ai/internal/events/job|cv` (job: đúng message Kafka của job-service), rồi gọi `GET /ai/recommendations/jobs?cvId=...`. Chi tiết: [`docs/03-index-search-parse.md`](docs/03-index-search-parse.md).
+Nạp job/CV qua `POST /ai/internal/events/job|cv` (đúng message Kafka của job-service / user-cv), rồi gọi `GET /ai/recommendations/jobs?cvId=...`. Chi tiết: [`docs/03-index-search-parse.md`](docs/03-index-search-parse.md).
 
 ## Test và lint
 

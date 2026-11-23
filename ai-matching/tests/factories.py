@@ -104,3 +104,44 @@ def job_envelope(type_: str, data: dict, event_id: str | None = None) -> dict:
         "correlationId": "corr-1",
         "data": data,
     }
+
+
+# ---------- Message thật của user-cv (EventEnvelope + CVProfileEventData)
+
+USER_ID = "aaaaaaaa-0000-4000-8000-000000000001"
+
+
+def make_cv_profile(user_id: str = USER_ID, **overrides) -> dict:
+    """JSON `CVProfileEventData` đúng như user-cv serialize (eduLevel là SỐ, id vị trí là Long)."""
+    data = {
+        "userId": user_id,
+        "positionId": 3,
+        "workLocationId": 1,
+        "cvAttachmentId": None,
+        "cvAttachmentUrl": None,
+        "summary": "Backend developer 4 năm kinh nghiệm xây dựng microservices với Spring Boot.",
+        "eduLevel": 4,
+        "education": "Đại học Bách khoa Hà Nội - Công nghệ thông tin",
+        "skills": [
+            {"skill": "Java", "yearsOfExperience": 4},
+            {"skill": "Spring Boot", "yearsOfExperience": 3},
+            {"skill": "PostgreSQL", "yearsOfExperience": 3},
+            {"skill": "Kafka", "yearsOfExperience": 2},
+            {"skill": "Docker", "yearsOfExperience": 2},
+        ],
+    }
+    data.update(overrides)
+    return data
+
+
+def cv_envelope(type_: str, data: dict, event_id: str | None = None) -> dict:
+    """EventEnvelope của user-cv: type là "cv_profile.created" / "cv_profile.updated"."""
+    return {
+        "eventId": event_id or str(uuid.uuid4()),
+        "type": type_,
+        "version": 1,
+        "occurredAt": iso(0),
+        "producer": "user-service",
+        "correlationId": None,
+        "data": data,
+    }

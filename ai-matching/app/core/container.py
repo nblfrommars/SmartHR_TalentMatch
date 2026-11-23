@@ -84,7 +84,7 @@ async def build_container(settings: Settings) -> Container:
         dense=dense,
         sparse=sparse,
         indexer=indexer,
-        events=EventHandler(indexer, processed),
+        events=EventHandler(indexer, processed, settings.cv_searchable_default),
         recommender=Recommender(store, get_retrieval_config()),
         parser=parser,
     )

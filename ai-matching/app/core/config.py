@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     qdrant_candidates_collection: str = "candidates"
 
     redis_url: str = "redis://localhost:6379/0"
+    # CV từ user-cv chưa có cờ "cho phép HR tìm kiếm"; tạm dùng giá trị mặc định này cho mọi CV.
+    # Mặc định false (bảo vệ dữ liệu cá nhân): HR chỉ tìm thấy CV khi bật AI_CV_SEARCHABLE_DEFAULT
+    cv_searchable_default: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
 
 

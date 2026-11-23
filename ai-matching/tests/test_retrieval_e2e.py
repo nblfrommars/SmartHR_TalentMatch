@@ -11,7 +11,15 @@ import pytest
 from app.core.config import Settings
 from app.core.container import build_container
 from app.main import create_app
-from tests.factories import iso, job_envelope, make_cv, make_job, make_job_res
+from tests.factories import (
+    cv_envelope,
+    iso,
+    job_envelope,
+    make_cv,
+    make_cv_profile,
+    make_job,
+    make_job_res,
+)
 
 GOOD = "job-good"
 
@@ -181,15 +189,12 @@ def test_internal_api_end_to_end(monkeypatch):
     try:
         with TestClient(create_app()) as client:
             job = make_job_res(GOOD)
-            cv = make_cv("cv-1").model_dump(mode="json", by_alias=True)
             created = job_envelope("job.created", job, event_id="e1")
 
             assert client.post("/ai/internal/events/job", json=created).json()["processed"]
             assert not client.post("/ai/internal/events/job", json=created).json()["processed"]
-            client.post(
-                "/ai/internal/events/cv",
-                json={"eventId": "e2", "type": "saved", "cvId": "cv-1", "snapshot": cv},
-            )
+            cv = cv_envelope("cv_profile.created", make_cv_profile("cv-1"), event_id="e2")
+            assert client.post("/ai/internal/events/cv", json=cv).json()["processed"]
 
             items = client.get("/ai/recommendations/jobs", params={"cvId": "cv-1"}).json()["items"]
             assert [i["jobId"] for i in items] == [GOOD]

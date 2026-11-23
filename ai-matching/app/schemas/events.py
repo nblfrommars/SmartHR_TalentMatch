@@ -3,17 +3,21 @@
 - `EventEnvelope`: "phong bì" chung của mọi event, khớp `EventEnvelope.java` trong common-lib.
 - `JobRes` (+ `LocationRes`, `IndustryRes`, `JobSkillRes`): phần `data` của event `job.events`,
   khớp DTO `dto/res` của job-service (xem backend/job-service/DATAFORAISERVICE.md).
+- `CvProfileData` (+ `CvProfileSkill`, `EduLevel`): phần `data` của event `cv.profile.events`,
+  khớp `CVProfileEventData.java` của user-cv (backend/user-cv/.../event/).
 
 Các model chỉ đọc những trường ai-matching cần; trường thừa (createdBy, createdAt...) bị bỏ qua
 (`extra="ignore"` của CamelModel), nên job-service thêm trường mới không làm vỡ ai-matching.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import IntEnum
 from typing import Generic, Self, TypeVar
 
 from pydantic import AwareDatetime, Field, NonNegativeInt, model_validator
 
 from app.schemas.common import CamelModel, JobStatus, JobType, Level, WorkMode
+from app.schemas.cv import CvEducation, CvSkill, CvSnapshot
 from app.schemas.job import JobSnapshot
 
 T = TypeVar("T")
@@ -128,4 +132,91 @@ class JobRes(CamelModel):
             deadline=self.deadline,
             published_at=self.published_at,
             version=self.version,
+        )
+
+
+# ---------- user-cv: CVProfileEventData ----------
+
+
+class EduLevel(IntEnum):
+    """Khớp enum EduLevel của user-cv. Jackson gửi dạng SỐ (do @JsonValue getValue())."""
+
+    LOWER_SECONDARY = 0
+    UPPER_SECONDARY = 1
+    INTERMEDIATE = 2
+    JUNIORCOLLEGE = 3
+    COLLEGE = 4
+    POSTGRADUATE = 5
+    STUDENT = 6
+    OTHER = 7
+
+    @property
+    def label(self) -> str:
+        return _EDU_LABELS[self]
+
+
+_EDU_LABELS = {
+    EduLevel.LOWER_SECONDARY: "Đã tốt nghiệp THCS",
+    EduLevel.UPPER_SECONDARY: "Đã tốt nghiệp THPT",
+    EduLevel.INTERMEDIATE: "Tốt nghiệp trung cấp",
+    EduLevel.JUNIORCOLLEGE: "Tốt nghiệp cao đẳng",
+    EduLevel.COLLEGE: "Tốt nghiệp đại học",
+    EduLevel.POSTGRADUATE: "Cao học",
+    EduLevel.STUDENT: "Sinh viên",
+    EduLevel.OTHER: "Khác",
+}
+
+
+class CvProfileSkill(CamelModel):
+    skill: str = Field(min_length=1)
+    years_of_experience: NonNegativeInt | None = None
+
+
+class CvProfileData(CamelModel):
+    """Mỗi User có đúng một CV profile, khóa chính là userId nên cvId = userId.
+
+    Không dùng cvAttachmentUrl (link MinIO ký sẵn, hết hạn sau 5 phút) và không lưu nó vào Qdrant.
+    """
+
+    user_id: str
+    position_id: int | None = None
+    work_location_id: int | None = None
+    cv_attachment_id: str | None = None
+    summary: str | None = None
+    edu_level: EduLevel | None = None
+    education: str | None = None
+    skills: list[CvProfileSkill] | None = None
+
+    def to_snapshot(
+        self, updated_at: datetime | None = None, searchable: bool = False
+    ) -> CvSnapshot:
+        if updated_at is not None and updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)  # occurredAt thiếu múi giờ: coi là UTC
+        skills = self.skills or []
+        years = [s.years_of_experience for s in skills if s.years_of_experience is not None]
+        education = (
+            # education là văn bản tự do (trường/ngành): đặt vào major để được tách từ vào sparse
+            [
+                CvEducation(
+                    degree=self.edu_level.label if self.edu_level else None, major=self.education
+                )
+            ]
+            if self.education or self.edu_level is not None
+            else []
+        )
+        return CvSnapshot(
+            cv_id=self.user_id,
+            user_id=self.user_id,
+            searchable=searchable,
+            updated_at=updated_at or datetime.now(UTC),
+            summary=self.summary,
+            # Số năm kinh nghiệm ước lượng = số năm lớn nhất trong các skill
+            years_experience=max(years) if years else None,
+            # Chỉ suy ra cấp bậc khi chắc chắn (đang là sinh viên); còn lại để trống (trung tính)
+            level=Level.INTERN if self.edu_level == EduLevel.STUDENT else None,
+            skills=[CvSkill(name=s.skill, years=s.years_of_experience) for s in skills],
+            education=education,
+            position_id=self.position_id,
+            work_location_id=self.work_location_id,
+            edu_level=self.edu_level.name if self.edu_level is not None else None,
         )

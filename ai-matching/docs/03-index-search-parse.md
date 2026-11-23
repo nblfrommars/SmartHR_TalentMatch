@@ -105,6 +105,30 @@ Message trên topic `job.events` (key = jobId) đúng như job-service gửi, xe
 - Payload Qdrant có thêm cho FE: `company_name`, `location_name`, `industry_name` (dạng gốc để hiển thị), `location_ids` / `industry_ids` (id của nó + id cấp cha), `version`.
 - Message sai (ví dụ `salaryMin > salaryMax`, `type` lạ) bị từ chối ngay lúc parse (422), không lọt xuống bước index.
 
+### Hợp đồng với user-cv (`schemas/events.py`)
+
+Message trên topic `cv.profile.events` (key = userId), khớp `CVProfileEventData.java`:
+
+```json
+{
+  "eventId": "uuid", "type": "cv_profile.created", "version": 1, "occurredAt": "...",
+  "producer": "user-service", "correlationId": "...",
+  "data": {
+    "userId": "uuid", "positionId": 12, "workLocationId": 1,
+    "cvAttachmentId": "uuid", "cvAttachmentUrl": "link MinIO ký sẵn (bỏ qua)",
+    "summary": "...", "eduLevel": 6, "education": "ĐH Bách khoa - CNTT",
+    "skills": [{"skill": "Java", "yearsOfExperience": 1}]
+  }
+}
+```
+
+- Một User có đúng một CV profile nên **`cvId` = `userId`** (FE gọi gợi ý bằng `cvId=<userId>`).
+- `eduLevel` là **số** 0–7 (Jackson `@JsonValue`), map sang `EduLevel`; `6` (Sinh viên) → level `INTERN`. Các giá trị khác không suy ra level (điểm level trung tính).
+- Số năm kinh nghiệm = số năm lớn nhất trong các skill.
+- `summary` vào dense và sparse (đã loại PII); `education` vào phần học vấn (được tách từ vào sparse).
+- `cvAttachmentUrl` bị bỏ qua, không lưu vào Qdrant (link bí mật, hết hạn sau 5 phút).
+- user-cv chưa có cờ cho phép HR tìm kiếm: mọi CV lấy `AI_CV_SEARCHABLE_DEFAULT` (mặc định `false`).
+
 ### `ingestion/events.py`: `EventHandler`
 
 | Event | Hành động |
@@ -112,9 +136,7 @@ Message trên topic `job.events` (key = jobId) đúng như job-service gửi, xe
 | `job.created`, `job.updated`, `job.closed` | Index lại toàn bộ từ `JobRes` trong `data` (closed giữ point cho thống kê, `status = CLOSED`) |
 | `job.expired` | Như trên, ép `status = CLOSED` |
 | `job.deleted` | Xóa point |
-| `cv.saved` | Index lại |
-| `cv.visibility_changed` | Cập nhật `searchable` |
-| `cv.deleted` | Xóa point ("right to be forgotten") |
+| `cv_profile.created`, `cv_profile.updated` | Index lại toàn bộ CV |
 
 - **Idempotent:** mỗi `eventId` chỉ xử lý một lần (lưu ở RAM hoặc Redis, TTL 7 ngày). Kafka có thể giao lại event cũ; có test bảo đảm event `created` giao lại sau khi đã `deleted` không làm job "sống lại".
 - **Bỏ event cũ đến muộn:** nếu `data.version` nhỏ hơn version của bản đang index thì bỏ qua.
@@ -258,8 +280,8 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
   uv run uvicorn app.main:app --port 8000
 # Swagger: http://localhost:8000/docs
 # 1. POST /ai/internal/events/job  {"eventId":"e1","type":"job.created","data":{JobRes...}}
-# 2. POST /ai/internal/events/cv   {"eventId":"e2","type":"saved","cvId":"cv1","snapshot":{...}}
-# 3. GET  /ai/recommendations/jobs?cvId=cv1
+# 2. POST /ai/internal/events/cv   {"eventId":"e2","type":"cv_profile.created","data":{CVProfileEventData...}}
+# 3. GET  /ai/recommendations/jobs?cvId=<userId>
 ```
 
 ---
@@ -273,7 +295,8 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
 
 **Chờ nhóm khác:**
 - [ ] Kafka consumer `job.events`: định dạng đã khớp job-service, compose đã có Kafka; còn viết consumer.
-- [ ] `cv.events`: chờ candidate-service chốt định dạng (dự kiến cùng `EventEnvelope`).
+- [ ] Kafka consumer `cv.profile.events`: định dạng đã khớp user-cv; còn viết consumer.
+- [ ] user-cv chưa gửi event khi **xóa CV** (cần `cv_profile.deleted` để xóa khỏi Qdrant) và chưa có cờ `searchable`.
 - [ ] Script `reindex` từ Postgres: chờ job-service / candidate-service có DB.
 - [ ] Chạy với Qdrant / Redis server thật: chờ `docker-compose`. Payload index chỉ có tác dụng trên server thật.
 - [ ] `POST /ai/feedback`: cần chốt nơi lưu feedback (Phase 8).
