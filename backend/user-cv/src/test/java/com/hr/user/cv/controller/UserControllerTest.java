@@ -45,7 +45,7 @@ class UserControllerTest {
 
         when(userService.getAll()).thenReturn(List.of(user));
 
-        mockMvc.perform(get("/api/users"))
+        mockMvc.perform(get("/api/v1/users"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("00000000-0000-0000-0000-000000000001"))
                 .andExpect(jsonPath("$[0].userName").value("alice"))
@@ -63,7 +63,7 @@ class UserControllerTest {
         response.setRole(UserRole.HR);
         when(userService.save(any(CreateUserRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/users")
+        mockMvc.perform(post("/api/v1/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userName\":\"bob\",\"role\":2,\"companyId\":\"00000000-0000-0000-0000-000000000001\"}"))
                 .andExpect(status().isCreated())

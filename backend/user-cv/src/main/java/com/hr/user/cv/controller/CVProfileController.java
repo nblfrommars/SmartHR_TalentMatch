@@ -22,7 +22,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/cvs")
+@RequestMapping("/api/v1/cvs")
 @RequiredArgsConstructor
 public class CVProfileController {
 

@@ -12,5 +12,7 @@ public interface JobApplicationService {
 
     List<JobApplicationResponse> getMyApplications(UUID applicantId);
 
+    List<JobApplicationResponse> getApplicationsForOwnedJob(UUID hrId, UUID jobId);
+
     void withdraw(UUID applicantId, UUID applicationId);
 }

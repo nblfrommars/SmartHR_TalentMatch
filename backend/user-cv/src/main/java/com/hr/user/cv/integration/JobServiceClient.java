@@ -45,11 +45,34 @@ public class JobServiceClient {
         }
     }
 
+    public JobSnapshot getJob(UUID jobId) {
+        try {
+            JobSnapshot job = restClient.get()
+                    .uri("/api/v1/jobs/{id}", jobId)
+                    .retrieve()
+                    .body(JobSnapshot.class);
+            if (job == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found");
+            }
+            return job;
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found", ex);
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to verify job owner", ex);
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Job-service is unavailable", ex);
+        }
+    }
+
     @Data
     public static class JobSnapshot {
         private UUID id;
         private String title;
         private String status;
         private OffsetDateTime deadline;
+        private UUID createdBy;
     }
 }

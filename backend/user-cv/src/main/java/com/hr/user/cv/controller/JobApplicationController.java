@@ -24,7 +24,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/applications")
+@RequestMapping("/api/v1/applications")
 @RequiredArgsConstructor
 public class JobApplicationController {
 
@@ -41,6 +41,12 @@ public class JobApplicationController {
     @GetMapping("/me")
     public List<JobApplicationResponse> getMyApplications(@AuthenticationPrincipal Jwt jwt) {
         return applicationService.getMyApplications(userId(jwt));
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    public List<JobApplicationResponse> getApplicationsForJob(@AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID jobId) {
+        return applicationService.getApplicationsForOwnedJob(userId(jwt), jobId);
     }
 
     @DeleteMapping("/{applicationId}")
