@@ -1,9 +1,8 @@
 package com.hr.user.cv.integration;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -34,12 +33,8 @@ public class KeycloakAdminClient {
     @Value("${keycloak.admin.client-secret:smarthr-admin-secret}")
     private String clientSecret;
 
-    public String createUser(String username, String email, String fullName, String password, String role,
-            UUID companyId) {
+    public String createUser(String username, String email, String fullName, String password, String role) {
         String accessToken = getServiceToken();
-        Map<String, Object> attributes = companyId == null
-                ? Map.of()
-                : Map.of("companyId", List.of(companyId.toString()));
         Map<String, Object> user = Map.of(
                 "username", username,
                 "email", email,
@@ -47,7 +42,6 @@ public class KeycloakAdminClient {
                 "enabled", true,
                 "requiredActions", List.of(),
                 "firstName", fullName == null ? "" : fullName,
-                "attributes", attributes,
                 "credentials", List.of(Map.of(
                         "type", "password",
                         "value", password,
