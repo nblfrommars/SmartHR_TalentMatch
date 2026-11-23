@@ -140,7 +140,25 @@ Message trên topic `cv.profile.events` (key = userId), khớp `CVProfileEventDa
 
 - **Idempotent:** mỗi `eventId` chỉ xử lý một lần (lưu ở RAM hoặc Redis, TTL 7 ngày). Kafka có thể giao lại event cũ; có test bảo đảm event `created` giao lại sau khi đã `deleted` không làm job "sống lại".
 - **Bỏ event cũ đến muộn:** nếu `data.version` nhỏ hơn version của bản đang index thì bỏ qua.
-- **Chưa nối Kafka**: consumer chỉ cần parse value của message thành `JobEvent` rồi gọi `handle_job` (job), tương tự với CV.
+- **Idempotent theo từng index:** key Redis là `evt:<collection jobs>+<collection candidates>:<eventId>`, nên dựng lại index mới (collection khác) từ Kafka không bị coi là trùng.
+
+### `ingestion/consumer.py`: Kafka consumer
+
+Bật bằng `AI_KAFKA_ENABLED=true`; chạy nền trong lifespan của FastAPI, nghe `job.events` và `cv.profile.events` (group `ai-matching`).
+
+| Tình huống | Xử lý |
+|------------|-------|
+| Xử lý xong | Commit offset (`enable_auto_commit=false`, commit sau khi xử lý: "ít nhất một lần") |
+| Message sai định dạng (JSON hỏng, `type` lạ, dữ liệu sai) | Đẩy ngay sang `<topic>.dlq` (header `dlq-reason`), commit, xử lý tiếp |
+| Lỗi tạm thời (Qdrant/Redis/OpenAI) | Thử tối đa 3 lần (chờ 0.5s rồi 1s giữa các lần); vẫn lỗi thì đẩy sang DLQ |
+| Không đẩy được DLQ (Kafka lỗi) | Không commit, đọc lại message đó sau khi kết nối lại |
+| Kafka sập | API gợi ý vẫn chạy; `/health` báo `kafka.connected=false`; tự kết nối lại |
+| Qdrant chưa sẵn sàng lúc khởi động | Thử lại tối đa 10 lần (1, 2, 4... 10 giây) |
+
+- Thứ tự: key Kafka là jobId/userId nên event của cùng một job/CV nằm cùng partition và được xử lý tuần tự.
+- Group mới đọc từ đầu topic (`auto_offset_reset=earliest`), nên dựng lại được toàn bộ index từ Kafka (trong thời gian topic còn giữ message).
+- `/health` trả `kafka: {enabled, connected, topics, lastError, stats: {processed, duplicate, dead_letter}}`.
+- Topic DLQ đang dựa vào Kafka tự tạo topic (mặc định của image `apache/kafka`). Môi trường tắt tự tạo topic thì cần tạo trước `job.events.dlq`, `cv.profile.events.dlq`.
 - **API nội bộ thay Kafka khi dev:** `POST /ai/internal/events/job` và `/cv`, nhận đúng message Kafka qua HTTP. **Mặc định tắt**, bật bằng `AI_INTERNAL_API_ENABLED=true`. Không được mở route này qua API gateway.
 
 ---
@@ -294,11 +312,9 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
 - [ ] HR tìm bằng câu hỏi tự do ("Java dev biết Kafka ở Hà Nội"): LLM tách thành `{semantic_text, skills, filters}`.
 
 **Chờ nhóm khác:**
-- [ ] Kafka consumer `job.events`: định dạng đã khớp job-service, compose đã có Kafka; còn viết consumer.
-- [ ] Kafka consumer `cv.profile.events`: định dạng đã khớp user-cv; còn viết consumer.
 - [ ] user-cv chưa gửi event khi **xóa CV** (cần `cv_profile.deleted` để xóa khỏi Qdrant) và chưa có cờ `searchable`.
 - [ ] Script `reindex` từ Postgres: chờ job-service / candidate-service có DB.
-- [ ] Chạy với Qdrant / Redis server thật: chờ `docker-compose`. Payload index chỉ có tác dụng trên server thật.
+- [x] Chạy với Kafka + Qdrant + Redis server thật (docker-compose) và image ai-matching: kiểm thử đầu-cuối đạt.
 - [ ] `POST /ai/feedback`: cần chốt nơi lưu feedback (Phase 8).
 
 **Cần quyết định:**

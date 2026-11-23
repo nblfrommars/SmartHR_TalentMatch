@@ -21,10 +21,6 @@ from app.schemas import CvProfileData, EventEnvelope, JobRes, JobStatus
 
 logger = logging.getLogger(__name__)
 
-# Topic Kafka (dùng cho consumer)
-JOB_TOPIC = "job.events"
-CV_TOPIC = "cv.profile.events"
-
 
 class JobEventType(StrEnum):
     """Giá trị `type` trong envelope, khớp JobEventType.java của job-service."""
@@ -81,15 +77,23 @@ class InMemoryProcessedEvents:
 
 
 class RedisProcessedEvents:
-    def __init__(self, redis: Redis, ttl_seconds: int = 7 * 24 * 3600) -> None:
+    """Lưu eventId đã xử lý trong Redis (TTL 7 ngày).
+
+    `namespace` gắn với bộ collection Qdrant đang ghi vào: "đã xử lý" nghĩa là đã áp dụng vào
+    ĐÚNG index này. Dựng lại index mới (collection khác, reindex) từ Kafka thì không bị coi là
+    trùng, dù dùng chung Redis.
+    """
+
+    def __init__(self, redis: Redis, ttl_seconds: int = 7 * 24 * 3600, namespace: str = "") -> None:
         self._redis = redis
         self._ttl = ttl_seconds
+        self._prefix = f"evt:{namespace}:" if namespace else "evt:"
 
     async def seen(self, event_id: str) -> bool:
-        return bool(await self._redis.exists(f"evt:{event_id}"))
+        return bool(await self._redis.exists(self._prefix + event_id))
 
     async def mark(self, event_id: str) -> None:
-        await self._redis.set(f"evt:{event_id}", 1, ex=self._ttl)
+        await self._redis.set(self._prefix + event_id, 1, ex=self._ttl)
 
 
 class EventHandler:

@@ -203,3 +203,49 @@ def test_app_startup_creates_collections():
         assert client.get("/health").status_code == 200
         container: Container = app.state.container
         assert container.store.collection(Kind.JOB) == "jobs"
+
+
+async def test_startup_retries_until_qdrant_is_ready(monkeypatch):
+    """Qdrant chưa sẵn sàng lúc khởi động (compose bật song song): thử lại, không chết ngay."""
+    import app.core.container as container_module
+    from app.vectorstore import QdrantStore
+
+    calls = 0
+    real = QdrantStore.ensure_collections
+
+    async def flaky(self):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise ConnectionError("Qdrant đang khởi động")
+        await real(self)
+
+    monkeypatch.setattr(QdrantStore, "ensure_collections", flaky)
+    monkeypatch.setattr(container_module.asyncio, "sleep", _no_sleep)
+    c = await build_container(
+        Settings(qdrant_url=":memory:", embedding_provider="hashing", embedding_dimension=64)
+    )
+    try:
+        assert calls == 3
+        assert await c.qdrant.collection_exists("jobs")
+    finally:
+        await c.close()
+
+
+async def test_startup_gives_up_after_max_attempts(monkeypatch):
+    import app.core.container as container_module
+    from app.vectorstore import QdrantStore
+
+    async def broken(self):
+        raise ConnectionError("Qdrant chết hẳn")
+
+    monkeypatch.setattr(QdrantStore, "ensure_collections", broken)
+    monkeypatch.setattr(container_module.asyncio, "sleep", _no_sleep)
+    with pytest.raises(ConnectionError):
+        await build_container(
+            Settings(qdrant_url=":memory:", embedding_provider="hashing", qdrant_startup_attempts=2)
+        )
+
+
+async def _no_sleep(_seconds):
+    return None
