@@ -70,6 +70,7 @@ public class JobController {
         return ResponseEntity.ok(jobService.searchJobs(industryId, locationId, salaryMin, salaryMax, level, companyName, keyword, pageable));
     }
 
+    //my
     @GetMapping("/my")
     public ResponseEntity<Page<JobRes>> getMyJobs(
             @AuthenticationPrincipal Jwt jwt,
