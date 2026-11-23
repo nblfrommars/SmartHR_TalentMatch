@@ -78,7 +78,7 @@ public class UserServiceImpl implements UserService {
         try {
             keycloakUserId = keycloakAdminClient.createUser(
                     req.getUserName().trim(), req.getEmail().trim(), req.getFullName(), req.getPassword(),
-                    keycloakRole, req.getCompanyId());
+                    keycloakRole);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to create user in Keycloak", ex);
         }

@@ -12,10 +12,14 @@ import org.springframework.web.server.ResponseStatusException;
 import com.hr.user.cv.dto.request.ApplyJobRequest;
 import com.hr.user.cv.dto.response.JobApplicationResponse;
 import com.hr.user.cv.entity.JobApplication;
+import com.hr.user.cv.entity.Attachment;
+import com.hr.user.cv.entity.CVProfile;
 import com.hr.user.cv.enums.ApplicationStatus;
 import com.hr.user.cv.enums.UserRole;
 import com.hr.user.cv.integration.JobServiceClient;
 import com.hr.user.cv.repository.JobApplicationRepository;
+import com.hr.user.cv.repository.AttachmentRepository;
+import com.hr.user.cv.repository.CVProfileRepository;
 import com.hr.user.cv.repository.UserRepository;
 import com.hr.user.cv.service.JobApplicationService;
 
@@ -28,6 +32,8 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     private final JobApplicationRepository applicationRepository;
     private final UserRepository userRepository;
     private final JobServiceClient jobServiceClient;
+    private final AttachmentRepository attachmentRepository;
+    private final CVProfileRepository cvProfileRepository;
 
     @Override
     @Transactional
@@ -43,9 +49,12 @@ public class JobApplicationServiceImpl implements JobApplicationService {
 
         jobServiceClient.getOpenJob(jobId);
 
+        UUID cvAttachmentId = resolveCvAttachmentId(applicantId, request);
+
         JobApplication application = new JobApplication();
         application.setJobId(jobId);
         application.setApplicantId(applicantId);
+        application.setCvAttachmentId(cvAttachmentId);
         application.setCoverLetter(request == null ? null : request.getCoverLetter());
         application.setStatus(ApplicationStatus.APPLIED);
 
@@ -80,10 +89,36 @@ public class JobApplicationServiceImpl implements JobApplicationService {
         response.setId(application.getId());
         response.setJobId(application.getJobId());
         response.setApplicantId(application.getApplicantId());
+        response.setCvAttachmentId(application.getCvAttachmentId());
         response.setCoverLetter(application.getCoverLetter());
         response.setStatus(application.getStatus());
         response.setAppliedAt(application.getAppliedAt());
         response.setUpdatedAt(application.getUpdatedAt());
         return response;
+    }
+
+    private UUID resolveCvAttachmentId(UUID applicantId, ApplyJobRequest request) {
+        UUID requestedAttachmentId = request == null ? null : request.getCvAttachmentId();
+        UUID cvAttachmentId = requestedAttachmentId;
+
+        if (cvAttachmentId == null) {
+            cvAttachmentId = cvProfileRepository.findById(applicantId)
+                    .map(CVProfile::getCvAttachmentId)
+                    .orElse(null);
+        }
+
+        if (cvAttachmentId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "cvAttachmentId is required or must be configured in your CV profile");
+        }
+
+        Attachment attachment = attachmentRepository.findById(cvAttachmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "CV attachment not found"));
+        if (!applicantId.equals(attachment.getCreatedBy())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "CV attachment does not belong to the applicant");
+        }
+        return cvAttachmentId;
     }
 }
