@@ -1,0 +1,21 @@
+# Caddy tự xin và gia hạn chứng chỉ Let's Encrypt cho các domain dưới đây.
+auth.{$DOMAIN} {
+	reverse_proxy keycloak:8080
+}
+
+# Presigned URL của MinIO (MINIO_PUBLIC_ENDPOINT=https://files.<domain>)
+files.{$DOMAIN} {
+	reverse_proxy minio:9000
+}
+
+# Giai đoạn 3: frontend + API cùng origin (frontend đang gọi đường dẫn tương đối /api/...)
+# {$DOMAIN} {
+# 	handle /api/* {
+# 		reverse_proxy api-gateway:8080
+# 	}
+# 	handle {
+# 		root * /srv/frontend
+# 		try_files {path} /index.html
+# 		file_server
+# 	}
+# }

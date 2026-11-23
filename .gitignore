@@ -40,3 +40,4 @@ minio_data/
 
 # Postman
 postman/
+!.env.aws.example
