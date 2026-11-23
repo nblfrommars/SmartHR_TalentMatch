@@ -17,6 +17,7 @@ concurrency:
 env:
   JAVA_VERSION: "21"
   PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.13.6"
   NODE_VERSION: "20"
 
 jobs:
@@ -204,18 +205,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: |
-            ai-matching/requirements*.txt
-            ai-matching/pyproject.toml
 
-      - name: Cài dependencies
+      # Cài đúng phiên bản trong uv.lock (giống Docker và máy dev), không để pip tự kéo bản mới nhất
+      - name: Cài dependencies (uv, theo uv.lock)
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e ".[dev]"; fi
-          pip install ruff pytest
+          python -m pip install "uv==${{ env.UV_VERSION }}"
+          uv sync --frozen --extra dev
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Lint (ruff)
         run: ruff check .
@@ -263,18 +259,13 @@ jobs:
         if: steps.secret.outputs.ok == 'true'
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: |
-            ai-matching/requirements*.txt
-            ai-matching/pyproject.toml
 
-      - name: Cài dependencies
+      - name: Cài dependencies (uv, theo uv.lock)
         if: steps.secret.outputs.ok == 'true'
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-          if [ -f pyproject.toml ] && [ ! -f requirements.txt ]; then pip install -e ".[dev]"; fi
+          python -m pip install "uv==${{ env.UV_VERSION }}"
+          uv sync --frozen --extra dev
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Chạy evaluation và kiểm tra ngưỡng
         if: steps.secret.outputs.ok == 'true'
