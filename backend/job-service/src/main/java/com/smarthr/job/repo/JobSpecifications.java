@@ -33,10 +33,10 @@ public final class JobSpecifications {
                 cb.greaterThan(root.get("deadline"), now));
     }
 
-    public static Specification<Job> ofCompany(UUID companyId, JobStatus status) {
+    public static Specification<Job> ofCreator(UUID userId, JobStatus status) {
         return (root, query, cb) -> {
-            Predicate byCompany = cb.equal(root.get("companyId"), companyId);
-            return status == null ? byCompany : cb.and(byCompany, cb.equal(root.get("status"), status));
+            Predicate byCreator = cb.equal(root.get("createdBy"), userId);
+            return status == null ? byCreator : cb.and(byCreator, cb.equal(root.get("status"), status));
         };
     }
 

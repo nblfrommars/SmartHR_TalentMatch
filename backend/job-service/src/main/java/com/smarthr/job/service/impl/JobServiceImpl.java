@@ -42,11 +42,10 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional
-    public JobRes createJob(CreateJobReq req, UUID companyId, UUID createdBy) {
+    public JobRes createJob(CreateJobReq req, UUID createdBy) {
         Job job = jobMapper.toEntity(req);
         job.setIndustry(findIndustry(req.getIndustryId()));
         job.setLocation(findLocation(req.getLocationId()));
-        job.setCompanyId(companyId);
         job.setCreatedBy(createdBy);
         job.setStatus(JobStatus.OPEN);
         job.setPublishedAt(OffsetDateTime.now());
@@ -59,8 +58,8 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional
-    public JobRes updateJob(UUID id, UpdateJobReq req, UUID companyId) {
-        Job job = findOwnedJob(id, companyId);
+    public JobRes updateJob(UUID id, UpdateJobReq req, UUID userId) {
+        Job job = findOwnedJob(id, userId);
         if (job.getStatus() == JobStatus.CLOSED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A closed job cannot be edited");
         }
@@ -78,9 +77,9 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public JobRes getJobById(UUID id, UUID companyId) {
+    public JobRes getJobById(UUID id, UUID userId) {
         Job job = jobRepo.findById(id).orElseThrow(JobServiceImpl::jobNotFound);
-        boolean owner = companyId != null && companyId.equals(job.getCompanyId());
+        boolean owner = userId != null && userId.equals(job.getCreatedBy());
         boolean publiclyVisible = job.getStatus() == JobStatus.OPEN && job.getDeadline().isAfter(OffsetDateTime.now());
         if (!owner && !publiclyVisible) {
             throw jobNotFound();
@@ -90,8 +89,8 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<JobRes> getJobsByCompany(UUID companyId, JobStatus status, Pageable pageable) {
-        return jobRepo.findAll(JobSpecifications.ofCompany(companyId, status), pageable)
+    public Page<JobRes> getJobsByCreator(UUID userId, JobStatus status, Pageable pageable) {
+        return jobRepo.findAll(JobSpecifications.ofCreator(userId, status), pageable)
                 .map(jobMapper::toResponse);
     }
 
@@ -106,8 +105,8 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional
-    public void closeJob(UUID id, UUID companyId) {
-        Job job = findOwnedJob(id, companyId);
+    public void closeJob(UUID id, UUID userId) {
+        Job job = findOwnedJob(id, userId);
         if (job.getStatus() == JobStatus.CLOSED) {
             return;
         }
@@ -120,8 +119,8 @@ public class JobServiceImpl implements JobService {
 
     @Override
     @Transactional
-    public void deleteJob(UUID id, UUID companyId) {
-        Job job = findOwnedJob(id, companyId);
+    public void deleteJob(UUID id, UUID userId) {
+        Job job = findOwnedJob(id, userId);
         JobRes snapshot = jobMapper.toResponse(job);
         jobRepo.delete(job);
         jobRepo.flush();
@@ -142,9 +141,9 @@ public class JobServiceImpl implements JobService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Location not found"));
     }
 
-    private Job findOwnedJob(UUID id, UUID companyId) {
+    private Job findOwnedJob(UUID id, UUID userId) {
         Job job = jobRepo.findById(id).orElseThrow(JobServiceImpl::jobNotFound);
-        if (!job.getCompanyId().equals(companyId)) {
+        if (!job.getCreatedBy().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to modify this job");
         }
         return job;

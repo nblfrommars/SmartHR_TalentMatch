@@ -175,7 +175,7 @@ flowchart LR
 - **Database-per-service:** service không đọc DB của service khác. Khi cần dữ liệu thì gọi REST (đồng bộ) hoặc giữ bản sao read-model nhận qua event (bất đồng bộ).
 - **Postgres là source of truth.** Qdrant chỉ là **index dẫn xuất**, có thể rebuild lại toàn bộ từ Postgres.
 - **Transactional Outbox:** service ghi nghiệp vụ và bảng `outbox` trong **cùng một transaction**. Một relay (scheduler poll, hoặc Debezium ở phase sau) publish sang Kafka, nhờ đó không mất event khi Kafka gặp sự cố.
-- **Gateway là cửa duy nhất:** các service nội bộ không expose ra ngoài. Gateway verify JWT rồi forward `X-User-Id`, `X-User-Role`, `X-Company-Id` xuống service.
+- **Gateway là cửa duy nhất:** các service nội bộ không expose ra ngoài. Gateway verify JWT rồi forward `X-User-Id`, `X-User-Role` xuống service.
 - **Idempotent consumer:** mọi consumer lưu `event_id` đã xử lý, nên event bị gửi trùng cũng không gây tác dụng phụ.
 
 ### 3.2 Trách nhiệm từng service
@@ -183,8 +183,8 @@ flowchart LR
 | Service | Trách nhiệm | Dữ liệu sở hữu | API chính (qua gateway `/api/v1`) |
 |---------|-------------|----------------|-----------------------------------|
 | **api-gateway** | Routing, verify JWT, CORS, rate limit, gán correlation-id | – | – |
-| **auth-service** | Đăng ký, đăng nhập, refresh/logout, quản lý user, role, công ty, Admin duyệt HR | `users`, `companies`, `refresh_tokens` (Redis) | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /users/me`, `PATCH /admin/hr/{id}/approve` |
-| **job-service** | CRUD job, tìm kiếm SQL (full-text + filter), scheduler đóng job hết hạn | `jobs`, `job_skills`, `outbox` | `POST /jobs`, `PUT /jobs/{id}`, `PATCH /jobs/{id}/close`, `DELETE /jobs/{id}`, `GET /jobs?industryId=&locationId=&salaryMin=&keyword=&...` (công khai, chỉ job OPEN chưa hết hạn), `GET /jobs/company` (HR, mọi trạng thái), `GET /jobs/{id}`, `GET /industries`, `GET /locations` |
+| **auth-service** | Đăng ký, đăng nhập, refresh/logout, quản lý user, role, Admin duyệt HR | `users`, `refresh_tokens` (Redis) | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /users/me`, `PATCH /admin/hr/{id}/approve` |
+| **job-service** | CRUD job, tìm kiếm SQL (full-text + filter), scheduler đóng job hết hạn | `jobs`, `job_skills`, `outbox` | `POST /jobs`, `PUT /jobs/{id}`, `PATCH /jobs/{id}/close`, `DELETE /jobs/{id}`, `GET /jobs?industryId=&locationId=&salaryMin=&keyword=&...` (công khai, chỉ job OPEN chưa hết hạn), `GET /jobs/my` (HR, job do mình tạo, mọi trạng thái), `GET /jobs/{id}`, `GET /industries`, `GET /locations` |
 | **candidate-service** | Quản lý hồ sơ và CV (form + PDF), cờ privacy | `candidates`, `cvs`, `cv_skills`, `cv_experiences`, `outbox` | `POST /cvs` (form), `POST /cvs/upload` (multipart PDF), `PUT /cvs/{id}`, `GET /cvs/{id}`, `PATCH /cvs/{id}/visibility` |
 | **application-service** | Apply job, state machine trạng thái đơn, danh sách ứng viên theo job | `applications`, `application_history`, `job_snapshot` (read-model), `outbox` | `POST /applications`, `GET /applications/me`, `GET /jobs/{id}/applications` (HR), `PATCH /applications/{id}/status` |
 | **notification-service** | Lưu và đẩy thông báo realtime | `notifications` | `GET /notifications`, `PATCH /notifications/{id}/read`, WS `/ws` → `/user/queue/notifications` |
@@ -233,12 +233,12 @@ sequenceDiagram
 
 **Chi tiết:**
 
-- **JWT claims:** `sub` (userId), `role` (`USER|HR|ADMIN`), `companyId` (chỉ HR), `jti`, `iat`, `exp`.
+- **JWT claims:** `sub` (userId), `role` (`USER|HR|ADMIN`), `jti`, `iat`, `exp`.
 - **RS256:** auth-service giữ private key, gateway và các service chỉ cần public key (expose qua `/.well-known/jwks.json`), nên không phải chia sẻ secret.
 - **Refresh token rotation:** nếu một refresh token **đã dùng rồi** bị gửi lại thì coi là bị đánh cắp và thu hồi toàn bộ session của user đó.
 - **Logout:** xóa refresh token trong Redis và đưa `jti` của access token vào blacklist (TTL = thời gian còn lại của token).
 - **Mật khẩu:** BCrypt cost 12, policy tối thiểu 8 ký tự, khóa tạm sau 5 lần đăng nhập sai (đếm bằng Redis).
-- **Defense-in-depth:** service nội bộ vẫn kiểm tra quyền sở hữu tài nguyên, ví dụ HR chỉ được sửa job có `company_id` trùng `X-Company-Id`.
+- **Defense-in-depth:** service nội bộ vẫn kiểm tra quyền sở hữu tài nguyên, ví dụ HR chỉ được sửa job có `created_by` trùng `X-User-Id`.
 
 ### 3.4 Luồng HR đăng job và đồng bộ sang Vector DB
 
@@ -281,7 +281,7 @@ Description: <mô tả đã làm sạch HTML, cắt tối đa ~1.500 token>
 | Field | Kiểu | Index | Dùng để |
 |-------|------|-------|---------|
 | `job_id` | keyword | ✅ | Map ngược về Postgres |
-| `company_id` | keyword | ✅ | Lọc theo công ty |
+| `company_name` | keyword | ✅ | Lọc theo tên công ty |
 | `status` | keyword | ✅ | `OPEN` / `CLOSED` / `DRAFT` |
 | `deadline_ts` | datetime | ✅ | **Loại job quá hạn** |
 | `published_ts` | datetime | ✅ | Boost job mới |
@@ -565,9 +565,7 @@ stateDiagram-v2
 
 ```mermaid
 erDiagram
-    COMPANY ||--o{ USER : "HR thuộc"
     USER ||--o{ CV : "có"
-    COMPANY ||--o{ JOB : "đăng"
     USER ||--o{ JOB : "HR tạo"
     JOB ||--o{ JOB_SKILL : "yêu cầu"
     CV ||--o{ CV_SKILL : "có"
@@ -580,14 +578,9 @@ erDiagram
            string email UK
            string password_hash
            enum role
-           enum status
-           uuid company_id FK }
-    COMPANY { uuid id PK
-              string name
-              string tax_code
-              bool verified }
+           enum status }
     JOB { uuid id PK
-          uuid company_id FK
+          string company_name
           uuid created_by FK
           string title
           text description
@@ -647,7 +640,7 @@ client.create_collection(
     sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.IDF)},
 )
 # Payload index: status, deadline_ts (datetime), salary_min/max (integer), location, industry,
-# level, job_type, work_mode, required_skills, company_id, min_years_exp
+# level, job_type, work_mode, required_skills, company_name, min_years_exp
 # Collection "candidates" có cấu trúc tương tự, payload: searchable, location, level,
 # years_experience, skills, desired_salary_min, updated_ts
 ```
@@ -787,12 +780,12 @@ Ngưỡng nằm ở `eval/thresholds.yaml`. Trong CI, Qdrant chạy bằng servi
 ### - [ ] Phase 1: Auth, Gateway, RBAC
 - [ ] auth-service: register/login/refresh/logout, BCrypt, RS256 JWT, JWKS endpoint
 - [ ] Refresh token rotation trong Redis, blacklist `jti`, khóa tạm khi đăng nhập sai nhiều lần
-- [ ] Entity Company; HR đăng ký ở trạng thái `PENDING`, Admin duyệt
+- [ ] HR đăng ký ở trạng thái `PENDING`, Admin duyệt
 - [ ] api-gateway: verify JWT, phân quyền theo route, forward header, CORS, rate limit
 - **DoD:** Integration test (Testcontainers) cho toàn bộ luồng auth; Swagger chạy được.
 
 ### - [ ] Phase 2: Job service
-- [x] CRUD job + validate, ownership check theo `companyId` (service kiểm tra thêm role `HR`)
+- [x] CRUD job + validate, ownership check theo `createdBy` (service kiểm tra thêm role `HR`)
 - [ ] Tìm kiếm và lọc SQL (industry, location, salary, level, job_type, keyword full-text Postgres), phân trang. *Đã có: filter, keyword `LIKE` trên title/description/skill (index trigram), phân trang. Còn thiếu: filter `job_type`/`work_mode`, full-text thật (`tsvector`).*
 - [x] Transactional Outbox + relay publish `job.events` (envelope chuẩn từ `common-lib`, relay `SKIP LOCKED`, tự dọn outbox cũ)
 - [x] Scheduler đóng job hết hạn và phát `job.expired`
@@ -861,7 +854,7 @@ Dưới đây là các điểm trong ý tưởng ban đầu **chưa được đ�
 | # | Vấn đề | Rủi ro nếu bỏ qua | Đề xuất |
 |---|--------|-------------------|---------|
 | 1 | **Role Admin chưa có chức năng cụ thể** | Admin trở thành role "cho có" | Duyệt HR/công ty, kiểm duyệt/gỡ job spam, khóa user, dashboard thống kê + chỉ số AI, replay DLQ |
-| 2 | **Chưa có thực thể Company** | HR nào cũng đăng được mọi thứ, không biết job của công ty nào | Thêm `Company`; HR thuộc công ty; Admin xác minh công ty (mã số thuế) |
+| 2 | **Không có thực thể Company** (chủ ý) | Job chỉ lưu `company_name` dạng chuỗi, không xác minh được công ty | Chấp nhận ở MVP; sau này có thể thêm lại Company nếu cần xác minh |
 | 3 | **Đồng bộ Postgres ↔ Vector DB** chưa được bàn tới | Sửa hoặc đóng job nhưng Qdrant vẫn giữ dữ liệu cũ, dẫn tới gợi ý sai | Transactional Outbox + Kafka + consumer idempotent + script reindex |
 | 4 | **Lọc job quá hạn** chỉ được nêu ở mức ý tưởng | Lọc sau khi search làm thiếu kết quả; scheduler chạy trễ làm lọt job quá hạn | Filter `deadline_ts >= now` **ngay trong prefetch** + scheduler đóng job (2 lớp) + test compliance 100% |
 | 5 | **"Khớp kỹ năng" chưa có định nghĩa** | Vector giống nhưng thiếu skill quan trọng vẫn lên top | Phân biệt `required` / `nice_to_have` / `must_have`; tính `s_skill` bằng code; luật loại cứng |

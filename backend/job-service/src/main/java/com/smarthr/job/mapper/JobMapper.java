@@ -102,7 +102,6 @@ public class JobMapper {
 
         return JobRes.builder()
                 .id(job.getId())
-                .companyId(job.getCompanyId())
                 .createdBy(job.getCreatedBy())
                 .companyName(job.getCompanyName())
                 .title(job.getTitle())

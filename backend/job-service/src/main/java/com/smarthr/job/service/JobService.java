@@ -13,18 +13,18 @@ import com.smarthr.job.model.enums.JobStatus;
 
 public interface JobService {
 
-    JobRes createJob(CreateJobReq req, UUID companyId, UUID createdBy);
+    JobRes createJob(CreateJobReq req, UUID createdBy);
 
-    JobRes updateJob(UUID id, UpdateJobReq req, UUID companyId);
+    JobRes updateJob(UUID id, UpdateJobReq req, UUID userId);
 
-    JobRes getJobById(UUID id, UUID companyId);
+    JobRes getJobById(UUID id, UUID userId);
 
-    Page<JobRes> getJobsByCompany(UUID companyId, JobStatus status, Pageable pageable);
+    Page<JobRes> getJobsByCreator(UUID userId, JobStatus status, Pageable pageable);
 
     Page<JobRes> searchJobs(UUID industryId, UUID locationId, Long salaryMin, Long salaryMax, JobLevel level,
             String companyName, String keyword, Pageable pageable);
 
-    void closeJob(UUID id, UUID companyId);
+    void closeJob(UUID id, UUID userId);
 
-    void deleteJob(UUID id, UUID companyId);
+    void deleteJob(UUID id, UUID userId);
 }

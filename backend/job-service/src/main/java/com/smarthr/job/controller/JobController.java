@@ -42,20 +42,19 @@ public class JobController {
     @PostMapping
     public ResponseEntity<JobRes> createJob(
             @Valid @RequestBody CreateJobReq req,
-            @RequestHeader("X-Company-Id") UUID companyId,
             @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-User-Role") String role
     ) {
         requireHr(role);
-        return ResponseEntity.status(HttpStatus.CREATED).body(jobService.createJob(req, companyId, userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(jobService.createJob(req, userId));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<JobRes> getJobById(
             @PathVariable UUID id,
-            @RequestHeader(value = "X-Company-Id", required = false) UUID companyId
+            @RequestHeader(value = "X-User-Id", required = false) UUID userId
     ) {
-        return ResponseEntity.ok(jobService.getJobById(id, companyId));
+        return ResponseEntity.ok(jobService.getJobById(id, userId));
     }
 
     @GetMapping
@@ -72,47 +71,47 @@ public class JobController {
         return ResponseEntity.ok(jobService.searchJobs(industryId, locationId, salaryMin, salaryMax, level, companyName, keyword, pageable));
     }
 
-    @GetMapping("/company")
-    public ResponseEntity<Page<JobRes>> getJobsByCompany(
-            @RequestHeader("X-Company-Id") UUID companyId,
+    @GetMapping("/my")
+    public ResponseEntity<Page<JobRes>> getMyJobs(
+            @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-User-Role") String role,
             @RequestParam(required = false) JobStatus status,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         requireHr(role);
-        return ResponseEntity.ok(jobService.getJobsByCompany(companyId, status, pageable));
+        return ResponseEntity.ok(jobService.getJobsByCreator(userId, status, pageable));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<JobRes> updateJob(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateJobReq req,
-            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-User-Role") String role
     ) {
         requireHr(role);
-        return ResponseEntity.ok(jobService.updateJob(id, req, companyId));
+        return ResponseEntity.ok(jobService.updateJob(id, req, userId));
     }
 
     @PatchMapping("/{id}/close")
     public ResponseEntity<Void> closeJob(
             @PathVariable UUID id,
-            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-User-Role") String role
     ) {
         requireHr(role);
-        jobService.closeJob(id, companyId);
+        jobService.closeJob(id, userId);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteJob(
             @PathVariable UUID id,
-            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-User-Role") String role
     ) {
         requireHr(role);
-        jobService.deleteJob(id, companyId);
+        jobService.deleteJob(id, userId);
         return ResponseEntity.noContent().build();
     }
 

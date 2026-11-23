@@ -23,7 +23,6 @@ import lombok.Setter;
 public class JobRes {
 
     private UUID id;
-    private UUID companyId;
     private UUID createdBy;
     private String companyName;
     private String title;

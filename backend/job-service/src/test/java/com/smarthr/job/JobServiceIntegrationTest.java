@@ -78,7 +78,6 @@ class JobServiceIntegrationTest {
     @Autowired OutboxRelayScheduler relay;
     @MockBean KafkaTemplate<String, String> kafkaTemplate;
 
-    private final UUID companyId = UUID.randomUUID();
     private final UUID userId = UUID.randomUUID();
 
     @BeforeEach
@@ -147,6 +146,23 @@ class JobServiceIntegrationTest {
     }
 
     @Test
+    void searchByCompanyNameIsCaseInsensitiveAndPartial() throws Exception {
+        String unique = "Co" + UUID.randomUUID().toString().substring(0, 8);
+        Map<String, Object> body = jobBody("Any title", skills("java"));
+        body.put("companyName", unique + " Holdings");
+        mvc.perform(post("/api/v1/jobs").headers(hr()).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.companyName").value(unique + " Holdings"));
+
+        mvc.perform(get("/api/v1/jobs").param("companyName", unique.toUpperCase()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(get("/api/v1/jobs").param("companyName", "no-such-" + unique))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
     void keywordAlsoMatchesSkillsAndTreatsWildcardsLiterally() throws Exception {
         String skill = "sk" + UUID.randomUUID().toString().substring(0, 8);
         createJob("Some title", skills(skill));
@@ -163,9 +179,9 @@ class JobServiceIntegrationTest {
         mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(hr())).andExpect(status().isNoContent());
 
         mvc.perform(get("/api/v1/jobs/" + id)).andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/jobs/" + id).header("X-Company-Id", UUID.randomUUID().toString()))
+        mvc.perform(get("/api/v1/jobs/" + id).header("X-User-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/jobs/" + id).header("X-Company-Id", companyId.toString()))
+        mvc.perform(get("/api/v1/jobs/" + id).header("X-User-Id", userId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"));
     }
@@ -207,10 +223,10 @@ class JobServiceIntegrationTest {
     }
 
     @Test
-    void onlyHrOfTheOwningCompanyCanModify() throws Exception {
+    void onlyTheCreatingHrCanModify() throws Exception {
         String id = createJob("Mine", skills("java")).get("id").asText();
 
-        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(headers("USER", companyId)))
+        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(headers("USER", userId)))
                 .andExpect(status().isForbidden());
         mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(headers("HR", UUID.randomUUID())))
                 .andExpect(status().isForbidden());
@@ -273,14 +289,13 @@ class JobServiceIntegrationTest {
     }
 
     private org.springframework.http.HttpHeaders hr() {
-        return headers("HR", companyId);
+        return headers("HR", userId);
     }
 
-    private org.springframework.http.HttpHeaders headers(String role, UUID company) {
+    private org.springframework.http.HttpHeaders headers(String role, UUID user) {
         org.springframework.http.HttpHeaders h = new org.springframework.http.HttpHeaders();
-        h.add("X-User-Id", userId.toString());
+        h.add("X-User-Id", user.toString());
         h.add("X-User-Role", role);
-        h.add("X-Company-Id", company.toString());
         return h;
     }
 
@@ -293,7 +308,6 @@ class JobServiceIntegrationTest {
 
     private Job saveRawJob(String title, JobStatus status, OffsetDateTime deadline) {
         return jobRepo.saveAndFlush(Job.builder()
-                .companyId(companyId)
                 .companyName("Acme Corp")
                 .createdBy(userId)
                 .title(title)
