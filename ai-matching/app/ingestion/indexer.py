@@ -28,6 +28,11 @@ class Indexer:
     async def set_job_status(self, job_id: str, status: JobStatus) -> None:
         await self.store.set_payload(Kind.JOB, job_id, {"status": status.value})
 
+    async def job_version(self, job_id: str) -> int | None:
+        """Version của bản job đang nằm trong Qdrant (None nếu chưa có hoặc không rõ)."""
+        point = await self.store.get(Kind.JOB, job_id)
+        return point.payload.get("version") if point else None
+
     async def set_cv_searchable(self, cv_id: str, searchable: bool) -> None:
         await self.store.set_payload(Kind.CV, cv_id, {"searchable": searchable})
 

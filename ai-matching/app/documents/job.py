@@ -17,6 +17,10 @@ from app.skills import get_normalizer
 from app.text import clean_text, normalize_keyword
 
 
+def _ids(*ids: str | None) -> list[str]:
+    return [i for i in ids if i]
+
+
 def build_job_document(job: JobSnapshot) -> IndexDocument:
     settings = get_settings()
     normalizer = get_normalizer()
@@ -53,21 +57,29 @@ def build_job_document(job: JobSnapshot) -> IndexDocument:
     payload = {
         "job_id": job.job_id,
         "company_id": job.company_id,
+        "company_name": clean_text(job.company_name) or None,
         "title": title,
         "status": job.status,
         "deadline_ts": to_utc_iso(job.deadline),
         "published_ts": to_utc_iso(job.published_at),
         "salary_min": job.salary_min,
         "salary_max": job.salary_max,
+        # location/industry: dạng chuẩn hóa để lọc theo tên; *_name: dạng gốc để FE hiển thị;
+        # *_ids: id của nó và id cấp cha, để lọc theo id (chọn "Hà Nội" ra cả job ở quận của Hà Nội)
         "location": normalize_keyword(job.location),
+        "location_name": clean_text(job.location) or None,
+        "location_ids": _ids(job.location_id, job.location_parent_id),
         "work_mode": job.work_mode,
         "industry": normalize_keyword(job.industry),
+        "industry_name": clean_text(job.industry) or None,
+        "industry_ids": _ids(job.industry_id, job.industry_parent_id),
         "level": job.level,
         "job_type": job.job_type,
         "required_skills": required,
         "nice_skills": nice,
         "must_have_skills": must_have,
         "min_years_exp": job.min_years_exp,
+        "version": job.version,
         "embedding_version": settings.embedding_version,
     }
 

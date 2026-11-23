@@ -79,20 +79,47 @@ Mọi thành phần được khởi tạo một lần trong `core/container.py` 
 Snapshot → `build_*_document` → embed (theo lô) → upsert.
 Khi job chỉ sửa metadata (lương, hạn nộp), văn bản không đổi nên cache trả lại vector cũ, **không gọi OpenAI lại** (đúng yêu cầu mục 3.4, có test kiểm chứng).
 
+### Hợp đồng với job-service (`schemas/events.py`)
+
+Message trên topic `job.events` (key = jobId) đúng như job-service gửi, xem `backend/job-service/DATAFORAISERVICE.md`:
+
+```json
+{
+  "eventId": "uuid", "type": "job.created", "version": 1, "occurredAt": "...",
+  "producer": "job-service", "correlationId": "...",
+  "data": {
+    "id": "uuid", "companyId": "uuid", "companyName": "FPT Software",
+    "title": "...", "description": "...", "level": "JUNIOR", "jobType": "INTERNSHIP",
+    "workMode": "HYBRID", "salaryMin": 15000000, "salaryMax": null, "minYearsExp": 0,
+    "location": {"id": "uuid", "name": "Cầu Giấy", "parentId": "uuid-Hà-Nội"},
+    "industry": {"id": "uuid", "name": "Công nghệ thông tin", "parentId": null},
+    "deadline": "...", "status": "OPEN", "version": 3, "publishedAt": "...",
+    "skills": [{"skill": "Java", "mustHave": true, "required": true}]
+  }
+}
+```
+
+- `EventEnvelope` khớp `EventEnvelope.java` (common-lib); `JobRes`, `LocationRes`, `IndustryRes`, `JobSkillRes` khớp DTO `dto/res` của job-service. Trường thừa (`createdBy`, `createdAt`...) bị bỏ qua.
+- `JobRes.to_snapshot()` chuyển sang `JobSnapshot` (mô hình nội bộ). Phân loại skill: `mustHave=true` → must_have; `required=true` (hoặc null) → bắt buộc; còn lại → nice-to-have.
+- `JobType` có đủ `INTERNSHIP`, `FREELANCE` như job-service.
+- Payload Qdrant có thêm cho FE: `company_name`, `location_name`, `industry_name` (dạng gốc để hiển thị), `location_ids` / `industry_ids` (id của nó + id cấp cha), `version`.
+- Message sai (ví dụ `salaryMin > salaryMax`, `type` lạ) bị từ chối ngay lúc parse (422), không lọt xuống bước index.
+
 ### `ingestion/events.py`: `EventHandler`
 
 | Event | Hành động |
 |-------|-----------|
-| `job.created`, `job.updated` | Index lại toàn bộ |
-| `job.closed`, `job.expired` | `status = CLOSED` (giữ point cho thống kê) |
+| `job.created`, `job.updated`, `job.closed` | Index lại toàn bộ từ `JobRes` trong `data` (closed giữ point cho thống kê, `status = CLOSED`) |
+| `job.expired` | Như trên, ép `status = CLOSED` |
 | `job.deleted` | Xóa point |
 | `cv.saved` | Index lại |
 | `cv.visibility_changed` | Cập nhật `searchable` |
 | `cv.deleted` | Xóa point ("right to be forgotten") |
 
 - **Idempotent:** mỗi `eventId` chỉ xử lý một lần (lưu ở RAM hoặc Redis, TTL 7 ngày). Kafka có thể giao lại event cũ; có test bảo đảm event `created` giao lại sau khi đã `deleted` không làm job "sống lại".
-- **Chưa nối Kafka**: chờ nhóm chốt event envelope. Khi có, consumer chỉ cần map message → `JobEvent` / `CvEvent` rồi gọi `handle_job` / `handle_cv`.
-- **API nội bộ thay Kafka khi dev:** `POST /ai/internal/events/job` và `/cv`, nhận đúng `JobEvent` / `CvEvent` qua HTTP. **Mặc định tắt**, bật bằng `AI_INTERNAL_API_ENABLED=true`. Không được mở route này qua API gateway.
+- **Bỏ event cũ đến muộn:** nếu `data.version` nhỏ hơn version của bản đang index thì bỏ qua.
+- **Chưa nối Kafka**: consumer chỉ cần parse value của message thành `JobEvent` rồi gọi `handle_job` (job), tương tự với CV.
+- **API nội bộ thay Kafka khi dev:** `POST /ai/internal/events/job` và `/cv`, nhận đúng message Kafka qua HTTP. **Mặc định tắt**, bật bằng `AI_INTERNAL_API_ENABLED=true`. Không được mở route này qua API gateway.
 
 ---
 
@@ -113,8 +140,11 @@ Khi thiếu dữ liệu ở một vế (CV không ghi level, job lương thỏa 
 ### API
 
 ```
-GET /ai/recommendations/jobs?cvId=...&location=Hà Nội&jobType=FULL_TIME&industry=...
+GET /ai/recommendations/jobs?cvId=...&locationId=<uuid>&industryId=<uuid>&jobType=INTERNSHIP
                             &salaryMin=30000000&excludeJobIds=a&excludeJobIds=b&limit=10
+# locationId / industryId: id lấy từ GET /api/v1/locations, /api/v1/industries của job-service
+# (khuyến nghị). Chọn tỉnh thì ra cả job ở quận thuộc tỉnh đó. Vẫn hỗ trợ lọc theo tên:
+# location=Hà Nội&industry=...
 GET /ai/search/candidates?jobId=...&location=...&level=SENIOR&minYears=3&limit=20
 ```
 
@@ -227,7 +257,7 @@ cd ai-matching
 AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=true \
   uv run uvicorn app.main:app --port 8000
 # Swagger: http://localhost:8000/docs
-# 1. POST /ai/internal/events/job  {"eventId":"e1","type":"created","jobId":"j1","snapshot":{...}}
+# 1. POST /ai/internal/events/job  {"eventId":"e1","type":"job.created","data":{JobRes...}}
 # 2. POST /ai/internal/events/cv   {"eventId":"e2","type":"saved","cvId":"cv1","snapshot":{...}}
 # 3. GET  /ai/recommendations/jobs?cvId=cv1
 ```
@@ -242,13 +272,11 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
 - [ ] HR tìm bằng câu hỏi tự do ("Java dev biết Kafka ở Hà Nội"): LLM tách thành `{semantic_text, skills, filters}`.
 
 **Chờ nhóm khác:**
-- [ ] Kafka consumer: chờ chốt event envelope (`common-lib`) và `docker-compose` có Kafka.
+- [ ] Kafka consumer `job.events`: định dạng đã khớp job-service, compose đã có Kafka; còn viết consumer.
+- [ ] `cv.events`: chờ candidate-service chốt định dạng (dự kiến cùng `EventEnvelope`).
 - [ ] Script `reindex` từ Postgres: chờ job-service / candidate-service có DB.
 - [ ] Chạy với Qdrant / Redis server thật: chờ `docker-compose`. Payload index chỉ có tác dụng trên server thật.
 - [ ] `POST /ai/feedback`: cần chốt nơi lưu feedback (Phase 8).
-
-**Để sau (đã thống nhất):**
-- [ ] Thêm `INTERNSHIP` vào `JobType` (nằm trong hợp đồng event, cần nhóm backend đồng ý).
 
 **Cần quyết định:**
 - [ ] OCR cho PDF scan: phải cài `tesseract-ocr` + `tesseract-ocr-vie` vào image Docker (image to thêm khoảng 100MB). Hiện trả 422 `SCANNED_PDF` và nhắc User điền form.
