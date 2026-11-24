@@ -19,6 +19,16 @@ export async function upsertJobSnapshot(db, s) {
   return rowCount > 0;
 }
 
+/** Xóa snapshot của job đã bị xóa (status DELETED) quá `days` ngày. Trả về số dòng đã xóa. */
+export async function deleteOldDeletedJobs(db, days) {
+  const { rowCount } = await db.query(
+    `DELETE FROM job_snapshots
+      WHERE status = 'DELETED' AND updated_at < now() - make_interval(days => $1)`,
+    [days],
+  );
+  return rowCount;
+}
+
 export async function findJobSnapshot(db, jobId) {
   const { rows } = await db.query(
     'SELECT job_id, hr_user_id, title, status, version FROM job_snapshots WHERE job_id = $1',

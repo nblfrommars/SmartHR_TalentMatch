@@ -71,6 +71,7 @@ npm run dev
 | `RETENTION_INTERVAL_MS` | `3600000` | Chu kỳ dọn thông báo cũ |
 | `RETENTION_READ_DAYS` | `90` | Xóa thông báo đã đọc quá số ngày này |
 | `RETENTION_MAX_DAYS` | `180` | Xóa mọi thông báo quá số ngày này |
+| `RETENTION_DELETED_JOB_DAYS` | `30` | Xóa snapshot của job đã xóa quá số ngày này |
 | `LOG_LEVEL` | `info` | |
 
 ## REST API
@@ -124,6 +125,7 @@ Mới nhất trước. `limit` từ 1 đến 100. Trang sau: truyền `nextCurso
 | `PATCH /api/v1/notifications/{id}/read` | Thông báo sau khi đánh dấu. Gọi lại nhiều lần không sao. Không tồn tại hoặc của người khác: 404 |
 | `PATCH /api/v1/notifications/read-all` | `{"updated": 3}` |
 | `GET /health` (không qua gateway) | `{"status":"UP","components":{"db":"UP","listener":"UP","kafka":"UP"}}`, có thành phần `DOWN` thì 503 |
+| `GET /metrics` (không qua gateway) | Metrics Prometheus, xem mục [Vận hành](#vận-hành) |
 
 Lỗi cùng định dạng với các service Java:
 
@@ -186,13 +188,138 @@ gọi lại `GET /api/v1/notifications` và `/unread-count`.
 ## Hướng dẫn frontend
 
 1. Đăng nhập xong: gọi `/unread-count` cho số trên chuông, mở WebSocket và gửi `auth`.
-2. Mỗi lần refresh được access token: gửi lại `auth` trên kết nối đang mở.
+2. Tự gia hạn token trên WebSocket trước khi hết hạn (xem client mẫu bên dưới).
 3. `notification.created`: thêm lên đầu danh sách, tăng số chưa đọc.
 4. `notification.read` / `notification.read_all`: cập nhật trạng thái trong danh sách, giảm số chưa đọc.
 5. HR bấm vào `APPLICATION_RECEIVED`:
    1. `PATCH /api/v1/notifications/{id}/read`
    2. Chuyển tới trang ứng viên của job `data.jobId`, dữ liệu từ `GET /api/v1/applications/jobs/{jobId}` (user-cv)
    3. Làm nổi bật đơn có id = `entityId`
+
+### Client WebSocket mẫu
+
+Frontend hiện chỉ refresh token khi gọi API (`getValidToken()` trong `frontend/src/auth/keycloak.js`). Access token
+Keycloak sống 5 phút, nên tab để yên không gọi API sẽ bị đóng `4001`. Client dưới đây tự refresh trước khi hết hạn và
+gửi lại `auth` trên kết nối đang mở, nên người dùng không bị ngắt; mất mạng / service deploy thì tự kết nối lại và lấy
+lại thông báo bị lỡ.
+
+```js
+import keycloak from './auth/keycloak';
+
+const WS_URL = `${import.meta.env.VITE_GATEWAY_WS_URL ?? 'ws://localhost:8080'}/ws/notifications`;
+const RENEW_BEFORE_MS = 60_000;
+
+/**
+ * onEvent(msg): nhận notification.created / notification.read / notification.read_all
+ * onReconnected(): gọi lại GET /api/v1/notifications và /unread-count để lấy thông báo bị lỡ
+ * Trả về hàm đóng kết nối (gọi khi đăng xuất / unmount).
+ */
+export function connectNotifications({ onEvent, onReconnected }) {
+  let ws;
+  let renewTimer;
+  let retry = 0;
+  let stopped = false;
+
+  async function sendAuth() {
+    await keycloak.updateToken(RENEW_BEFORE_MS / 1000); // refresh nếu còn dưới 60 giây
+    ws.send(JSON.stringify({ type: 'auth', token: keycloak.token }));
+  }
+
+  // Refresh token thất bại = phiên Keycloak đã hết: dừng hẳn và đưa về trang đăng nhập
+  function sessionEnded() {
+    stopped = true;
+    clearTimeout(renewTimer);
+    ws.close();
+    keycloak.login();
+  }
+
+  function scheduleRenew(expiresAt) {
+    clearTimeout(renewTimer);
+    const delay = Math.max(0, Date.parse(expiresAt) - Date.now() - RENEW_BEFORE_MS);
+    renewTimer = setTimeout(() => sendAuth().catch(sessionEnded), delay);
+  }
+
+  function open() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => sendAuth().catch(sessionEnded);
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'connected' || msg.type === 'auth.renewed') {
+        if (msg.type === 'connected') {
+          retry = 0;
+          onReconnected?.();
+        }
+        scheduleRenew(msg.data.expiresAt);
+        return;
+      }
+      onEvent(msg);
+    };
+    ws.onclose = (e) => {
+      clearTimeout(renewTimer);
+      if (stopped) return;
+      // 4001, 4401, 1001, mất mạng...: kết nối lại (sendAuth tự refresh token), chờ 1s, 2s, 4s… tối đa 30s
+      setTimeout(open, Math.min(30_000, 1000 * 2 ** retry++));
+    };
+  }
+
+  open();
+  return () => {
+    stopped = true;
+    clearTimeout(renewTimer);
+    ws?.close();
+  };
+}
+```
+
+Lưu ý: client tự gia hạn nên phiên Keycloak **không hết vì không hoạt động** (mặc định 30 phút) khi tab còn mở; người
+dùng chỉ bị đăng xuất khi chạm thời hạn tối đa của phiên (mặc định 10 giờ). Nếu muốn "để yên 30 phút thì đăng xuất",
+client phải ngừng gia hạn khi người dùng không thao tác.
+
+## Vận hành
+
+### Log
+
+Log JSON (pino) ra stdout. Mỗi request HTTP ghi một dòng `"HTTP request"` gồm `method`, `path`, `status`,
+`durationMs`, `userId`, `correlationId` (bỏ qua `/health`, `/metrics` khi thành công). Request 4xx ghi mức `warn`,
+5xx mức `error`.
+
+`X-Correlation-Id`: nhận từ gateway (header hợp lệ: tối đa 128 ký tự chữ, số, `_ . : -`), thiếu hoặc không hợp lệ thì
+tự sinh; luôn trả lại trong response. Log của Kafka consumer dùng `correlationId` trong envelope của event.
+Token không bao giờ được ghi ra log.
+
+### Metrics (`GET /metrics`)
+
+| Metric | Loại | Nhãn | Ý nghĩa |
+|---|---|---|---|
+| `notification_http_request_duration_seconds` | histogram | `method`, `route`, `status` | Thời gian xử lý request (`route` đã thay UUID bằng `:id`) |
+| `notification_created_total` | counter | `type` | Số thông báo đã tạo |
+| `notification_kafka_messages_total` | counter | `topic`, `result` | Message đã xử lý: `handled` / `ignored` / `dlq` |
+| `notification_kafka_consumer_lag` | gauge | `topic`, `partition` | Số message chưa xử lý (tính lúc scrape) |
+| `notification_ws_connections` | gauge | | Kết nối WebSocket đã xác thực trên instance này |
+| `notification_ws_users` | gauge | | Số user đang kết nối trên instance này |
+| `notification_ws_auth_failures_total` | counter | `reason` | Kết nối bị đóng 4401: `timeout` / `invalid_token` / `bad_message` / `user_mismatch` |
+| `notification_process_*`, `notification_nodejs_*` | | | Metrics mặc định của Node (CPU, RAM, event loop…) |
+
+Nên cảnh báo khi: `notification_kafka_consumer_lag` tăng liên tục, `notification_kafka_messages_total{result="dlq"}`
+tăng, hoặc `/health` trả 503.
+
+### Đẩy lại message từ DLQ
+
+Message lỗi nằm ở `job.events.DLQ` / `job.application.events.DLQ` (header `x-dlq-error` ghi lý do). Sau khi sửa
+nguyên nhân (deploy bản sửa, hoặc dữ liệu thiếu đã tới), đẩy lại về topic gốc:
+
+```bash
+# Trong container: docker exec -it smarthr-notification-service sh
+npm run dlq:replay -- --topic job.application.events --dry-run   # xem trước: offset, eventId, type, lỗi
+npm run dlq:replay -- --topic job.application.events --limit 1   # thử 1 message
+npm run dlq:replay -- --topic job.application.events             # đẩy lại tất cả
+```
+
+- Chỉ đẩy các message có trong DLQ lúc bắt đầu chạy. Đẩy xong message nào thì commit message đó (consumer group
+  `notification-service-dlq-replay`), chạy lại không đẩy trùng. `--dry-run` không đẩy, không commit.
+- Giữ nguyên key, value, header gốc; bỏ header `x-dlq-*`, thêm `x-dlq-replay-count`. Message vẫn lỗi sẽ quay lại DLQ
+  với số lần đã đẩy lại.
+- An toàn khi đẩy lại message đã xử lý: thông báo chống trùng theo `eventId`.
 
 ## Test
 

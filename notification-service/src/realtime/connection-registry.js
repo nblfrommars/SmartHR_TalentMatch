@@ -38,4 +38,10 @@ export class ConnectionRegistry {
   get userCount() {
     return this.#byUser.size;
   }
+
+  get socketCount() {
+    let total = 0;
+    for (const sockets of this.#byUser.values()) total += sockets.size;
+    return total;
+  }
 }

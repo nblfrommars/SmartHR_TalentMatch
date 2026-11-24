@@ -1,3 +1,4 @@
+import { notificationsCreated } from '../metrics.js';
 import { publishRead } from './channels.js';
 import { encodeCursor } from './cursor.js';
 
@@ -27,7 +28,9 @@ export async function insertNotification(db, n) {
       n.sourceEventId,
     ],
   );
-  return rows[0] ?? null;
+  const row = rows[0] ?? null;
+  if (row) notificationsCreated.inc({ type: row.type });
+  return row;
 }
 
 /** Trang thông báo mới nhất trước. Trả về { rows, nextCursor }. */
