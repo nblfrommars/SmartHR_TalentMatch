@@ -84,6 +84,16 @@ spring:
                 key-resolver: "#{@userOrIpKeyResolver}"
                 redis-rate-limiter.replenishRate: 10
                 redis-rate-limiter.burstCapacity: 20
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://notification-service:8084}
+          predicates:
+            - Path=/api/v1/notifications/**
+        # WebSocket: trình duyệt không gửi được header Authorization khi mở WebSocket nên route này
+        # được permitAll trong SecurityConfig; notification-service tự verify token (?access_token=)
+        - id: notification-service-ws
+          uri: ${NOTIFICATION_SERVICE_WS_URL:ws://notification-service:8084}
+          predicates:
+            - Path=/ws/notifications
 
 management:
   endpoints:
