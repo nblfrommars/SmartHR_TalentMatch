@@ -1,12 +1,20 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Kafka, logLevel, Partitioners } from 'kafkajs';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { kafkaMessages } from '../metrics.js';
+import {
+  createKafka,
+  createProducer,
+  DLQ_ERROR_HEADER,
+  DLQ_OFFSET_HEADER,
+  DLQ_SUFFIX,
+  fetchConsumerLag,
+} from './client.js';
 import { parseEnvelope, PoisonMessageError } from './envelope.js';
 import { APPLICATION_EVENTS_TOPIC, handleApplicationEvent } from './handlers/application-events.js';
 import { handleJobEvent, JOB_EVENTS_TOPIC } from './handlers/job-events.js';
 
-const HANDLERS = {
+export const HANDLERS = {
   [JOB_EVENTS_TOPIC]: handleJobEvent,
   [APPLICATION_EVENTS_TOPIC]: handleApplicationEvent,
 };
@@ -16,7 +24,13 @@ const HANDLERS = {
  * vào <topic>.DLQ rồi đi tiếp, để một message lỗi không chặn cả partition.
  * Tách riêng khỏi kafkajs để test được.
  */
-export async function processMessage({ pool, topic, message, heartbeat, sendToDlq, backoffMs }) {
+export async function processMessage(args) {
+  const result = await processMessageInner(args);
+  kafkaMessages.inc({ topic: args.topic, result });
+  return result;
+}
+
+async function processMessageInner({ pool, topic, message, heartbeat, sendToDlq, backoffMs }) {
   const handler = HANDLERS[topic];
   let log = logger.child({ topic, offset: message.offset });
 
@@ -49,26 +63,23 @@ export async function processMessage({ pool, topic, message, heartbeat, sendToDl
 }
 
 export async function startConsumer(pool) {
-  const kafka = new Kafka({
-    clientId: config.kafka.clientId,
-    brokers: config.kafka.brokers,
-    logLevel: logLevel.WARN,
-  });
+  const kafka = createKafka();
   const consumer = kafka.consumer({ groupId: config.kafka.groupId });
-  // DefaultPartitioner băm key bằng murmur2 giống producer Java, key DLQ giữ đúng partition như topic gốc
-  const producer = kafka.producer({ createPartitioner: Partitioners.DefaultPartitioner });
+  const producer = createProducer(kafka);
+  // Dùng để đo consumer lag cho metrics
+  const admin = kafka.admin();
 
   async function sendToDlq(topic, message, err) {
     await producer.send({
-      topic: `${topic}.DLQ`,
+      topic: `${topic}${DLQ_SUFFIX}`,
       messages: [
         {
           key: message.key,
           value: message.value,
           headers: {
             ...message.headers,
-            'x-dlq-error': String(err?.message ?? err).slice(0, 1000),
-            'x-dlq-original-offset': message.offset,
+            [DLQ_ERROR_HEADER]: String(err?.message ?? err).slice(0, 1000),
+            [DLQ_OFFSET_HEADER]: message.offset,
           },
         },
       ],
@@ -96,6 +107,7 @@ export async function startConsumer(pool) {
   });
 
   await producer.connect();
+  await admin.connect();
   await consumer.connect();
   // fromBeginning: lần đầu chạy phải đọc lại toàn bộ job.events để dựng đủ job_snapshots
   await consumer.subscribe({ topics: Object.keys(HANDLERS), fromBeginning: true });
@@ -107,9 +119,11 @@ export async function startConsumer(pool) {
 
   return {
     isHealthy: () => healthy,
+    fetchLag: () => fetchConsumerLag(admin, config.kafka.groupId, Object.keys(HANDLERS)),
     async stop() {
       await consumer.disconnect();
       await producer.disconnect();
+      await admin.disconnect();
     },
   };
 }

@@ -23,6 +23,7 @@ import {
   CLOSE_TOKEN_EXPIRED,
 } from '../src/realtime/ws-server.js';
 import { deleteExpired } from '../src/notifications/notification-repo.js';
+import { deleteOldDeletedJobs } from '../src/jobs/job-snapshot-repo.js';
 
 const ADMIN_URL = process.env.TEST_DATABASE_URL;
 const ISSUER = 'http://test-issuer/realms/smarthr';
@@ -208,6 +209,44 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
     expect(left.rows.map((r) => r.id).sort()).toEqual([unreadOld, fresh].sort());
   });
 
+  it('HTTP: trả lại X-Correlation-Id nhận được, thiếu thì tự sinh, giá trị lạ thì thay', async () => {
+    const given = await request(app).get('/api/v1/notifications/unread-count')
+      .set('X-User-Id', randomUUID()).set('X-Correlation-Id', 'abc-123');
+    expect(given.headers['x-correlation-id']).toBe('abc-123');
+    const generated = await request(app).get('/health');
+    expect(generated.headers['x-correlation-id']).toMatch(/^[0-9a-f-]{36}$/);
+    const unsafe = await request(app).get('/health').set('X-Correlation-Id', 'a b <script>');
+    expect(unsafe.headers['x-correlation-id']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('/metrics: có metrics HTTP, thông báo, Kafka, WebSocket', async () => {
+    await request(app).get(`/api/v1/notifications/${randomUUID()}/read`).set('X-User-Id', randomUUID());
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/plain/);
+    expect(res.text).toMatch(/notification_http_request_duration_seconds_count\{method="GET",route="\/api\/v1\/notifications\/:id\/read",status="404"\} \d+/);
+    expect(res.text).toMatch(/notification_created_total\{type="APPLICATION_RECEIVED"\} [1-9]/);
+    expect(res.text).toContain('notification_ws_connections');
+    expect(res.text).toContain('notification_kafka_consumer_lag');
+    expect(res.text).toContain('notification_process_cpu_user_seconds_total');
+  });
+
+  it('retention: xóa snapshot DELETED quá hạn, giữ job còn sống và job mới xóa', async () => {
+    const oldDeleted = jobRes();
+    const recentDeleted = jobRes();
+    const alive = jobRes();
+    for (const job of [oldDeleted, recentDeleted, alive]) await handleJobEvent(pool, envelope('job.created', job));
+    await handleJobEvent(pool, envelope('job.deleted', oldDeleted));
+    await handleJobEvent(pool, envelope('job.deleted', recentDeleted));
+    await pool.query("UPDATE job_snapshots SET updated_at = now() - interval '40 days' WHERE job_id = ANY($1)",
+      [[oldDeleted.id, alive.id]]);
+
+    expect(await deleteOldDeletedJobs(pool, 30)).toBe(1);
+    const { rows } = await pool.query('SELECT job_id FROM job_snapshots WHERE job_id = ANY($1)',
+      [[oldDeleted.id, recentDeleted.id, alive.id]]);
+    expect(rows.map((r) => r.job_id).sort()).toEqual([recentDeleted.id, alive.id].sort());
+  });
+
   describe('WebSocket', () => {
     const ORIGIN = 'http://localhost:5173';
     const AUTH_TIMEOUT_MS = 500;
@@ -288,6 +327,8 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
     it('không gửi auth trong thời hạn thì đóng 4401', async () => {
       const ws = await open();
       expect(await ws.closed).toBe(CLOSE_AUTH_FAILED);
+      const metrics = (await request(app).get('/metrics')).text;
+      expect(metrics).toMatch(/notification_ws_auth_failures_total\{reason="timeout"\} [1-9]/);
     });
 
     it('token trên URL không còn được chấp nhận', async () => {

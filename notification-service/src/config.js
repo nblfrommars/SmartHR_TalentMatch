@@ -50,5 +50,7 @@ export const config = Object.freeze({
     // Thông báo đã đọc giữ 90 ngày; chưa đọc cũng xóa sau 180 ngày
     readDays: int('RETENTION_READ_DAYS', 90),
     maxDays: int('RETENTION_MAX_DAYS', 180),
+    // Snapshot của job đã xóa giữ thêm 30 ngày (đơn apply đến muộn vẫn tìm được tên job)
+    deletedJobDays: int('RETENTION_DELETED_JOB_DAYS', 30),
   }),
 });

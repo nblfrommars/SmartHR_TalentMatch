@@ -5,6 +5,7 @@ import { runMigrations } from './db/migrate.js';
 import { createApp } from './http/app.js';
 import { startConsumer } from './kafka/consumer.js';
 import { logger } from './logger.js';
+import { setMetricSources } from './metrics.js';
 import { startRetentionJob } from './maintenance/retention.js';
 import { ConnectionRegistry } from './realtime/connection-registry.js';
 import { startPgListener } from './realtime/pg-listener.js';
@@ -22,6 +23,10 @@ const retention = startRetentionJob(pool, config.retention);
 
 const checks = { listener: listener.isListening };
 if (consumer) checks.kafka = consumer.isHealthy;
+setMetricSources({
+  wsConnections: () => ({ users: registry.userCount, sockets: registry.socketCount }),
+  ...(consumer && { kafkaLag: consumer.fetchLag }),
+});
 
 const server = http.createServer(createApp({ pool, checks }));
 const ws = attachWebSocketServer(server, {
