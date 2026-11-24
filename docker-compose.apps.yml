@@ -150,6 +150,11 @@ services:
       CORS_ALLOWED_ORIGINS: https://${DOMAIN}
     networks: [smarthr-net]
 
+  frontend:
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env.aws}/smarthr/frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 64m
+    networks: [smarthr-net]
   # Đã khai báo trong docker-compose.aws.yml, chỉ thêm giới hạn RAM
   qdrant:
     mem_limit: 256m

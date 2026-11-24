@@ -10,15 +10,16 @@ files.{$DOMAIN} {
 
 # API + WebSocket đi qua gateway (cùng origin với frontend)
 {$DOMAIN} {
-	handle /api/* {
-		reverse_proxy api-gateway:8080
-	}
-	handle /ws/* {
-		reverse_proxy api-gateway:8080
-	}
-	handle {
-		respond "SmartHR đang chạy. Frontend chưa được triển khai." 200
-	}
+        handle /api/* {
+                reverse_proxy api-gateway:8080
+        }
+        handle /ws/* {
+                reverse_proxy api-gateway:8080
+        }
+        handle {
+                reverse_proxy frontend:80
+        }
+}
 
 	# Giai đoạn 3: thay khối handle cuối bằng
 	# handle {

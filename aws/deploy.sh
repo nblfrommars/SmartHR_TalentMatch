@@ -7,7 +7,7 @@ set -a; . ./.env.aws; set +a
 export COMPOSE_FILE=docker-compose.aws.yml:docker-compose.apps.yml
 dc() { docker compose --env-file .env.aws "$@"; }
 
-APPS="job-service user-service api-gateway ai-matching notification-service"
+APPS="job-service user-service api-gateway ai-matching notification-service frontend"
 
 /snap/bin/aws ecr get-login-password --region ap-southeast-2 \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY"

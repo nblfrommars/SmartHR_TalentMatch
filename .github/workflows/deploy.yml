@@ -53,6 +53,12 @@ jobs:
               file: notification-service/Dockerfile,
               args: "",
             }
+          - {
+              name: frontend,
+              context: frontend,
+              file: frontend/Dockerfile,
+              args: "VITE_KEYCLOAK_URL=https://auth.linhnguyen.io.vn",
+            }
     steps:
       - uses: actions/checkout@v4
 
