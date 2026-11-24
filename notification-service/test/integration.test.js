@@ -17,7 +17,11 @@ import { handleJobEvent } from '../src/kafka/handlers/job-events.js';
 import { ConnectionRegistry } from '../src/realtime/connection-registry.js';
 import { startPgListener } from '../src/realtime/pg-listener.js';
 import { createTokenVerifier } from '../src/realtime/token-verifier.js';
-import { attachWebSocketServer, CLOSE_TOKEN_EXPIRED } from '../src/realtime/ws-server.js';
+import {
+  attachWebSocketServer,
+  CLOSE_AUTH_FAILED,
+  CLOSE_TOKEN_EXPIRED,
+} from '../src/realtime/ws-server.js';
 import { deleteExpired } from '../src/notifications/notification-repo.js';
 
 const ADMIN_URL = process.env.TEST_DATABASE_URL;
@@ -206,6 +210,7 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
 
   describe('WebSocket', () => {
     const ORIGIN = 'http://localhost:5173';
+    const AUTH_TIMEOUT_MS = 500;
     let sign;
     let server;
     let wsServer;
@@ -225,6 +230,7 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
       wsServer = attachWebSocketServer(server, {
         path: '/ws/notifications',
         heartbeatMs: 30000,
+        authTimeoutMs: AUTH_TIMEOUT_MS,
         allowedOrigins: [ORIGIN],
         verifyToken: createTokenVerifier({ issuer: ISSUER, jwks }),
         registry,
@@ -243,26 +249,82 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
       await listener?.stop();
     });
 
-    function rejectStatus(url, headers = {}) {
-      return new Promise((resolve) => {
-        const ws = new WebSocket(url, { headers });
-        ws.on('unexpected-response', (_req, res) => resolve(res.statusCode));
-        ws.on('error', () => {});
-      });
-    }
-
-    async function connect(userId, exp) {
-      const ws = new WebSocket(`${base}?access_token=${await sign(userId, exp)}`, { headers: { Origin: ORIGIN } });
+    /** Mở kết nối (chưa xác thực). Ghi lại mọi message và mã đóng. */
+    async function open(url = base, origin = ORIGIN) {
+      const ws = new WebSocket(url, { headers: origin ? { Origin: origin } : {} });
       sockets.push(ws);
-      await nextMessage(ws, (m) => m.type === 'connected');
+      ws.received = [];
+      ws.on('message', (raw) => ws.received.push(JSON.parse(raw.toString())));
+      ws.closed = new Promise((resolve) => ws.on('close', (code) => resolve(code)));
+      await new Promise((resolve, reject) => {
+        ws.once('open', resolve);
+        ws.once('error', reject);
+      });
       return ws;
     }
 
-    it('từ chối token sai (401) và Origin lạ (403)', async () => {
-      expect(await rejectStatus(`${base}?access_token=not-a-jwt`, { Origin: ORIGIN })).toBe(401);
-      expect(await rejectStatus(`${base}`, { Origin: ORIGIN })).toBe(401);
-      const token = await sign(randomUUID());
-      expect(await rejectStatus(`${base}?access_token=${token}`, { Origin: 'https://evil.example' })).toBe(403);
+    async function connect(userId, exp) {
+      const ws = await open();
+      const connected = nextMessage(ws, (m) => m.type === 'connected');
+      ws.send(JSON.stringify({ type: 'auth', token: await sign(userId, exp) }));
+      ws.connectedMsg = await connected;
+      return ws;
+    }
+
+    it('Origin lạ bị từ chối ngay lúc bắt tay (403)', async () => {
+      const status = await new Promise((resolve) => {
+        const ws = new WebSocket(base, { headers: { Origin: 'https://evil.example' } });
+        ws.on('unexpected-response', (_req, res) => resolve(res.statusCode));
+        ws.on('error', () => {});
+      });
+      expect(status).toBe(403);
+    });
+
+    it('xác thực bằng message auth: trả connected kèm expiresAt', async () => {
+      const ws = await connect(randomUUID());
+      expect(Date.parse(ws.connectedMsg.data.expiresAt)).toBeGreaterThan(Date.now());
+    });
+
+    it('không gửi auth trong thời hạn thì đóng 4401', async () => {
+      const ws = await open();
+      expect(await ws.closed).toBe(CLOSE_AUTH_FAILED);
+    });
+
+    it('token trên URL không còn được chấp nhận', async () => {
+      const ws = await open(`${base}?access_token=${await sign(randomUUID())}`);
+      expect(await ws.closed).toBe(CLOSE_AUTH_FAILED);
+      expect(ws.received).toEqual([]);
+    });
+
+    it.each([
+      ['token sai', JSON.stringify({ type: 'auth', token: 'not-a-jwt' })],
+      ['message đầu không phải auth', JSON.stringify({ type: 'hello' })],
+      ['message không phải JSON', 'abc'],
+      ['auth thiếu token', JSON.stringify({ type: 'auth' })],
+    ])('%s thì đóng 4401', async (_name, payload) => {
+      const ws = await open();
+      ws.send(payload);
+      expect(await ws.closed).toBe(CLOSE_AUTH_FAILED);
+      expect(ws.received).toEqual([]);
+    });
+
+    it('message quá lớn (trước khi xác thực) bị đóng 1009', async () => {
+      const ws = await open();
+      ws.send(JSON.stringify({ type: 'auth', token: 'x'.repeat(20 * 1024) }));
+      expect(await ws.closed).toBe(1009);
+    });
+
+    it('chưa xác thực thì không nhận thông báo', async () => {
+      const job = jobRes();
+      await handleJobEvent(pool, envelope('job.created', job));
+      const pending = await open(); // của HR nhưng chưa gửi auth
+      const authed = await connect(job.createdBy);
+      const pushed = nextMessage(authed, (m) => m.type === 'notification.created');
+      await handleApplicationEvent(pool, envelope('job_application.created', {
+        applicationId: randomUUID(), jobId: job.id, applicantId: randomUUID(),
+      }));
+      await pushed;
+      expect(pending.received).toEqual([]);
     });
 
     it('đẩy thông báo mới tới đúng HR, người khác không nhận', async () => {
@@ -270,8 +332,6 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
       await handleJobEvent(pool, envelope('job.created', job));
       const hrSocket = await connect(job.createdBy);
       const otherSocket = await connect(randomUUID());
-      const otherReceived = [];
-      otherSocket.on('message', (raw) => otherReceived.push(JSON.parse(raw.toString())));
 
       const pushed = nextMessage(hrSocket, (m) => m.type === 'notification.created');
       const applicationId = randomUUID();
@@ -284,7 +344,7 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
       });
 
       await new Promise((r) => setTimeout(r, 200));
-      expect(otherReceived).toEqual([]);
+      expect(otherSocket.received.filter((m) => m.type !== 'connected')).toEqual([]);
     });
 
     it('đánh dấu đã đọc ở một tab thì tab khác của cùng HR nhận notification.read / read_all', async () => {
@@ -308,21 +368,43 @@ describe.skipIf(!ADMIN_URL)('notification-service trên Postgres thật', () => 
       expect((await readMsg).data).toEqual({ ids: [first.id] });
 
       // Đọc lại thông báo đã đọc: không phát lại
-      const tabAMessages = [];
-      tabA.on('message', (raw) => tabAMessages.push(JSON.parse(raw.toString()).type));
+      const before = tabA.received.length;
       await request(app).patch(`/api/v1/notifications/${first.id}/read`).set('X-User-Id', hr);
 
       const readAll = nextMessage(tabB, (m) => m.type === 'notification.read_all');
       await request(app).patch('/api/v1/notifications/read-all').set('X-User-Id', hr);
       expect(Date.parse((await readAll).data.readAt)).not.toBeNaN();
       await new Promise((r) => setTimeout(r, 100));
-      expect(tabAMessages).toEqual(['notification.read_all']);
+      expect(tabA.received.slice(before).map((m) => m.type)).toEqual(['notification.read_all']);
     });
 
-    it('đóng kết nối với mã 4001 khi token hết hạn', async () => {
+    it('token hết hạn mà không gia hạn thì đóng 4001', async () => {
       const ws = await connect(randomUUID(), Math.floor(Date.now() / 1000) + 2);
-      const code = await new Promise((resolve) => ws.on('close', (c) => resolve(c)));
-      expect(code).toBe(CLOSE_TOKEN_EXPIRED);
+      expect(await ws.closed).toBe(CLOSE_TOKEN_EXPIRED);
     }, 10000);
+
+    it('gửi lại auth với token mới thì được gia hạn, không bị đóng', async () => {
+      const user = randomUUID();
+      const ws = await connect(user, Math.floor(Date.now() / 1000) + 2);
+      const renewed = nextMessage(ws, (m) => m.type === 'auth.renewed');
+      ws.send(JSON.stringify({ type: 'auth', token: await sign(user, '5m') }));
+      expect(Date.parse((await renewed).data.expiresAt)).toBeGreaterThan(Date.now() + 60_000);
+      await new Promise((r) => setTimeout(r, 3000));
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+    }, 10000);
+
+    it('gia hạn bằng token của user khác thì đóng 4401', async () => {
+      const ws = await connect(randomUUID());
+      ws.send(JSON.stringify({ type: 'auth', token: await sign(randomUUID()) }));
+      expect(await ws.closed).toBe(CLOSE_AUTH_FAILED);
+    });
+
+    it('đã xác thực mà gửi message khác thì bỏ qua, không đóng', async () => {
+      const ws = await connect(randomUUID());
+      ws.send(JSON.stringify({ type: 'ping' }));
+      ws.send('rác');
+      await new Promise((r) => setTimeout(r, 200));
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+    });
   });
 });

@@ -67,6 +67,7 @@ npm run dev
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:5174` | Origin được mở WebSocket |
 | `WS_PATH` | `/ws/notifications` | |
 | `WS_HEARTBEAT_MS` | `30000` | Ping để phát hiện kết nối chết |
+| `WS_AUTH_TIMEOUT_MS` | `5000` | Thời gian tối đa từ lúc mở kết nối tới khi client gửi `auth` |
 | `RETENTION_INTERVAL_MS` | `3600000` | Chu kỳ dọn thông báo cũ |
 | `RETENTION_READ_DAYS` | `90` | Xóa thông báo đã đọc quá số ngày này |
 | `RETENTION_MAX_DAYS` | `180` | Xóa mọi thông báo quá số ngày này |
@@ -132,18 +133,38 @@ Lỗi cùng định dạng với các service Java:
 
 ## WebSocket
 
+Token **không** đi trên URL (tránh lộ trong access log của gateway / proxy). Giống frame `CONNECT` của STOMP, client
+mở kết nối trước rồi gửi token bằng message đầu tiên. Gateway để route này `permitAll`; notification-service tự
+verify token Keycloak.
+
 ```js
-const ws = new WebSocket(`ws://localhost:8080/ws/notifications?access_token=${accessToken}`);
+const ws = new WebSocket('ws://localhost:8080/ws/notifications');
+ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: accessToken }));
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  // msg.type: connected | auth.renewed | notification.created | notification.read | notification.read_all
+};
 ```
 
-Trình duyệt không gửi được header `Authorization` khi mở WebSocket, nên token đi qua query `access_token` và
-notification-service tự verify (gateway để route này `permitAll`). Client chỉ nhận, mọi thao tác đi qua REST.
+- Phải gửi `auth` trong **5 giây** (`WS_AUTH_TIMEOUT_MS`) sau khi mở, nếu không bị đóng mã `4401`.
+- Trước khi xác thực, message khác `auth` (hoặc lớn hơn 16KB) đều làm đóng kết nối.
+- **Gia hạn không cần kết nối lại:** khi refresh được access token mới, gửi lại
+  `{"type":"auth","token":"<token mới>"}` trên kết nối đang mở. Token phải của cùng user, nếu không bị đóng `4401`.
+  Nên gửi trước `expiresAt` một chút (vd khi frontend refresh token).
+- Sau khi xác thực, client chỉ nhận; mọi thao tác (đánh dấu đã đọc…) đi qua REST. Message khác `auth` bị bỏ qua.
+
+### Message client gửi
+
+| `type` | Trường | Khi nào |
+|---|---|---|
+| `auth` | `token`: access token Keycloak | Ngay sau khi mở kết nối, và mỗi lần có token mới |
 
 ### Message server gửi
 
 | `type` | `data` | Khi nào |
 |---|---|---|
-| `connected` | không có | Xác thực xong. **Chỉ coi là đã kết nối khi nhận được message này** |
+| `connected` | `{"expiresAt": "…"}` | Xác thực xong. **Chỉ coi là đã kết nối khi nhận được message này** |
+| `auth.renewed` | `{"expiresAt": "…"}` | Gia hạn bằng token mới thành công |
 | `notification.created` | Một thông báo, giống item của `GET /api/v1/notifications` | Có thông báo mới |
 | `notification.read` | `{"ids": ["…"]}` | Tab / thiết bị khác của cùng user vừa đánh dấu đã đọc |
 | `notification.read_all` | `{"readAt": "…"}` | Tab / thiết bị khác vừa đánh dấu tất cả là đã đọc |
@@ -152,9 +173,9 @@ notification-service tự verify (gateway để route này `permitAll`). Client 
 
 | Mã | Ý nghĩa | Frontend nên |
 |---|---|---|
-| `4001` | Token hết hạn | Refresh token rồi kết nối lại |
-| `1002` trước khi nhận `connected` | Token sai (qua gateway: gateway nhận kết nối trước rồi đóng khi service từ chối) | Lấy token mới / đăng nhập lại |
-| HTTP 401 khi bắt tay | Token sai (gọi thẳng service, không qua gateway) | Như trên |
+| `4001` | Token hết hạn mà chưa gửi token mới | Refresh token rồi kết nối lại |
+| `4401` | Không xác thực được: token sai, quá 5 giây chưa gửi `auth`, message đầu không phải `auth`, hoặc gia hạn bằng token của user khác | Lấy token mới / đăng nhập lại rồi kết nối lại |
+| `1009` | Message quá lớn (> 16KB) | Lỗi phía client |
 | HTTP 403 khi bắt tay | `Origin` không nằm trong `CORS_ALLOWED_ORIGINS` | Sửa cấu hình |
 | `1001` | Service đang dừng / deploy | Kết nối lại sau vài giây |
 | Khác / mất mạng | | Kết nối lại với backoff |
@@ -164,10 +185,11 @@ gọi lại `GET /api/v1/notifications` và `/unread-count`.
 
 ## Hướng dẫn frontend
 
-1. Đăng nhập xong: gọi `/unread-count` cho số trên chuông, mở WebSocket.
-2. `notification.created`: thêm lên đầu danh sách, tăng số chưa đọc.
-3. `notification.read` / `notification.read_all`: cập nhật trạng thái trong danh sách, giảm số chưa đọc.
-4. HR bấm vào `APPLICATION_RECEIVED`:
+1. Đăng nhập xong: gọi `/unread-count` cho số trên chuông, mở WebSocket và gửi `auth`.
+2. Mỗi lần refresh được access token: gửi lại `auth` trên kết nối đang mở.
+3. `notification.created`: thêm lên đầu danh sách, tăng số chưa đọc.
+4. `notification.read` / `notification.read_all`: cập nhật trạng thái trong danh sách, giảm số chưa đọc.
+5. HR bấm vào `APPLICATION_RECEIVED`:
    1. `PATCH /api/v1/notifications/{id}/read`
    2. Chuyển tới trang ứng viên của job `data.jobId`, dữ liệu từ `GET /api/v1/applications/jobs/{jobId}` (user-cv)
    3. Làm nổi bật đơn có id = `entityId`
@@ -189,4 +211,3 @@ rồi xóa khi xong. Không đặt thì chỉ chạy unit test.
   upload hoặc admin).
 - Chưa có thông báo cho ứng viên (đổi trạng thái đơn) và cho HR khi ứng viên rút đơn: user-cv chưa phát event.
 - Độ trễ apply → thông báo khoảng 2 giây, phần lớn do outbox relay của user-cv quét mỗi 2 giây.
-- Token nằm trên URL WebSocket nên có thể xuất hiện trong access log của proxy.

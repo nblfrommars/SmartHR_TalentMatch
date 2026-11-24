@@ -27,6 +27,7 @@ const server = http.createServer(createApp({ pool, checks }));
 const ws = attachWebSocketServer(server, {
   path: config.ws.path,
   heartbeatMs: config.ws.heartbeatMs,
+  authTimeoutMs: config.ws.authTimeoutMs,
   allowedOrigins: config.ws.allowedOrigins,
   verifyToken: createTokenVerifier(config.auth),
   registry,

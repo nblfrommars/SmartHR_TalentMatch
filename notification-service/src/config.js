@@ -39,6 +39,8 @@ export const config = Object.freeze({
   ws: Object.freeze({
     path: process.env.WS_PATH ?? '/ws/notifications',
     heartbeatMs: int('WS_HEARTBEAT_MS', 30000),
+    // Thời gian tối đa từ lúc mở kết nối tới khi client gửi message auth
+    authTimeoutMs: int('WS_AUTH_TIMEOUT_MS', 5000),
     // Cùng biến và giá trị mặc định với gateway / user-service
     allowedOrigins: list('CORS_ALLOWED_ORIGINS', ['http://localhost:5173', 'http://localhost:5174']),
   }),

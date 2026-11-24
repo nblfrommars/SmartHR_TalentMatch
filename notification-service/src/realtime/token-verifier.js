@@ -3,7 +3,8 @@ import { isUuid } from '../notifications/cursor.js';
 
 /**
  * Xác thực access token Keycloak cho kết nối WebSocket. Trình duyệt không gửi được header
- * Authorization khi mở WebSocket, nên service tự verify token thay vì dựa vào X-User-Id của gateway.
+ * Authorization khi mở WebSocket nên token được gửi bằng message auth đầu tiên (xem ws-server.js), và
+ * service tự verify thay vì dựa vào X-User-Id của gateway.
  * Trả về { userId (claim sub), expiresAt (ms, null nếu token không có exp) }.
  */
 export function createTokenVerifier({ issuer, jwksUri, jwks = createRemoteJWKSet(new URL(jwksUri)) }) {
