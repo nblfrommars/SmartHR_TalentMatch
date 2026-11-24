@@ -8,14 +8,23 @@ files.{$DOMAIN} {
 	reverse_proxy minio:9000
 }
 
-# Giai đoạn 3: frontend + API cùng origin (frontend đang gọi đường dẫn tương đối /api/...)
-# {$DOMAIN} {
-# 	handle /api/* {
-# 		reverse_proxy api-gateway:8080
-# 	}
-# 	handle {
-# 		root * /srv/frontend
-# 		try_files {path} /index.html
-# 		file_server
-# 	}
-# }
+# API + WebSocket đi qua gateway (cùng origin với frontend)
+{$DOMAIN} {
+	handle /api/* {
+		reverse_proxy api-gateway:8080
+	}
+	handle /ws/* {
+		reverse_proxy api-gateway:8080
+	}
+	handle {
+		respond "SmartHR đang chạy. Frontend chưa được triển khai." 200
+	}
+
+	# Giai đoạn 3: thay khối handle cuối bằng
+	# handle {
+	# 	root * /srv/frontend
+	# 	try_files {path} /index.html
+	# 	file_server
+	# }
+	# và bỏ comment dòng mount ./frontend/dist trong docker-compose.aws.yml
+}

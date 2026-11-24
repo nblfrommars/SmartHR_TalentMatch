@@ -1,0 +1,155 @@
+# Giai đoạn 2: các service ứng dụng. Dùng chung với docker-compose.aws.yml:
+#   export COMPOSE_FILE=docker-compose.aws.yml:docker-compose.apps.yml
+#   docker compose --env-file .env.aws ...
+# Image lấy từ ECR (GitHub Actions build + push), không build trên server.
+
+x-java-opts: &java-opts
+  JAVA_TOOL_OPTIONS: "-Xms128m -Xmx320m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError"
+
+services:
+  job-service:
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env.aws}/smarthr/job-service:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      <<: *java-opts
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/job_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    networks: [smarthr-net]
+
+  user-service:
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env.aws}/smarthr/user-service:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      job-service:
+        condition: service_started
+      kafka:
+        condition: service_started
+    environment:
+      <<: *java-opts
+      SPRING_PROFILES_ACTIVE: prod
+      # Liquibase: application-prod.yaml trên main đang để enabled: true; trước đây quyết định là tắt.
+      # Bật lại bằng cách đổi thành "true" sau khi xem db.changelog-master.yaml.
+      SPRING_LIQUIBASE_ENABLED: "false"
+      DB_URL: jdbc:postgresql://postgres:5432/user_db
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      RABBIT_HOST: rabbitmq
+      RABBIT_PORT: "5672"
+      RABBIT_USER: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER}
+      RABBIT_PASSWORD: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS}
+      AUTH_ISSUER_URI: https://auth.${DOMAIN:?Set DOMAIN}/realms/smarthr
+      AUTH_JWK_SET_URI: http://keycloak:8080/realms/smarthr/protocol/openid-connect/certs
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: smarthr
+      KEYCLOAK_ADMIN_CLIENT_ID: smarthr-admin-service
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET in .env.aws}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: https://files.${DOMAIN}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: cv-files
+      JOB_SERVICE_BASE_URL: http://job-service:8082
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+    networks: [smarthr-net]
+
+  api-gateway:
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env.aws}/smarthr/api-gateway:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      user-service:
+        condition: service_started
+      job-service:
+        condition: service_started
+      ai-matching:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    environment:
+      <<: *java-opts
+      AUTH_ISSUER_URI: https://auth.${DOMAIN}/realms/smarthr
+      AUTH_JWK_SET_URI: http://keycloak:8080/realms/smarthr/protocol/openid-connect/certs
+      USER_SERVICE_URL: http://user-service:8081
+      JOB_SERVICE_URL: http://job-service:8082
+      AI_MATCHING_URL: http://ai-matching:8000
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
+      NOTIFICATION_SERVICE_WS_URL: ws://notification-service:8084
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+    networks: [smarthr-net]
+
+  ai-matching:
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env.aws}/smarthr/ai-matching:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      kafka:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      AI_ENVIRONMENT: dev
+      AI_KAFKA_ENABLED: "true"
+      AI_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AI_QDRANT_URL: http://qdrant:6333
+      AI_REDIS_URL: redis://redis:6379/1
+      AI_EMBEDDING_CACHE: redis
+      # hashing: không cần API key. Đổi sang openai thì đặt đồng thời
+      # AI_EMBEDDING_PROVIDER=openai, AI_EMBEDDING_VERSION=text-embedding-3-small@v1, OPENAI_API_KEY (và re-index)
+      AI_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-hashing}
+      AI_EMBEDDING_VERSION: ${AI_EMBEDDING_VERSION:-hashing@v1}
+      AI_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_LLM_EXPLANATIONS: "false"
+      AI_CV_SEARCHABLE_DEFAULT: "false"
+      AI_INTERNAL_API_ENABLED: "false"
+    networks: [smarthr-net]
+
+  notification-service:
+    image: ${ECR_REGISTRY:?Set ECR_REGISTRY in .env.aws}/smarthr/notification-service:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 256m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=160"
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/notification_db
+      KAFKA_ENABLED: "true"
+      KAFKA_BROKERS: kafka:9092
+      AUTH_ISSUER_URI: https://auth.${DOMAIN}/realms/smarthr
+      AUTH_JWK_SET_URI: http://keycloak:8080/realms/smarthr/protocol/openid-connect/certs
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+    networks: [smarthr-net]
+
+  # Đã khai báo trong docker-compose.aws.yml, chỉ thêm giới hạn RAM
+  qdrant:
+    mem_limit: 256m

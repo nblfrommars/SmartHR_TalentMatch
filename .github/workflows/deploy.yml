@@ -1,0 +1,115 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [deploying]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  INSTANCE_ID: i-02035bdad53b04774
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - {
+              name: job-service,
+              context: backend,
+              file: backend/Dockerfile,
+              args: "SERVICE=job-service",
+            }
+          - {
+              name: user-service,
+              context: backend,
+              file: backend/Dockerfile,
+              args: "SERVICE=user-cv",
+            }
+          - {
+              name: api-gateway,
+              context: backend,
+              file: backend/Dockerfile.gateway,
+              args: "",
+            }
+          - {
+              name: ai-matching,
+              context: ai-matching,
+              file: ai-matching/Dockerfile,
+              args: "",
+            }
+          - {
+              name: notification-service,
+              context: notification-service,
+              file: notification-service/Dockerfile,
+              args: "",
+            }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.args }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/smarthr/${{ matrix.name }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/smarthr/${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM
+        run: |
+          CMD='cd /home/ubuntu/smarthr && OLD=$(sudo -u ubuntu git rev-parse HEAD) && sudo -u ubuntu git fetch --quiet origin deploying && sudo -u ubuntu git reset --hard origin/deploying && OLD_COMMIT=$OLD bash aws/deploy.sh'
+          PARAMS=$(jq -n --arg c "$CMD" '{commands: [$c], executionTimeout: ["1200"]}')
+          ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${GITHUB_SHA}" \
+            --parameters "$PARAMS" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $ID"
+
+          STATUS=Pending
+          for i in $(seq 1 120); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Success|Failed|Cancelled|TimedOut) break ;; esac
+            sleep 10
+          done
+
+          echo "Status: $STATUS"
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query StandardOutputContent --output text
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query StandardErrorContent --output text
+          [ "$STATUS" = "Success" ]
