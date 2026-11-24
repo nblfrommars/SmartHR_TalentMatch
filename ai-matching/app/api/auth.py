@@ -48,8 +48,15 @@ class Identity:
 
 
 def get_identity(request: Request) -> Identity:
-    user_id = (request.headers.get(USER_ID_HEADER) or "").strip() or None
+    raw_user_id = request.headers.get(USER_ID_HEADER)
+    user_id = (raw_user_id or "").strip() or None
     role = (request.headers.get(ROLE_HEADER) or "").strip().upper() or None
+    # Gateway LUÔN gắn X-User-Role (có thể rỗng) và X-User-Id (rỗng, hoặc mất hẳn khi token không
+    # có `sub`). Service nội bộ thì không gắn. Có dấu hiệu đi qua gateway mà không xác định được
+    # người dùng thì từ chối, không được coi là lời gọi nội bộ
+    via_gateway = raw_user_id is not None or ROLE_HEADER in request.headers
+    if via_gateway and user_id is None:
+        raise HTTPException(status_code=401, detail="Token không có định danh người dùng")
     if user_id is None and get_settings().require_identity:
         raise HTTPException(status_code=401, detail="Thiếu thông tin người dùng (X-User-Id)")
     return Identity(user_id=user_id, role=role)

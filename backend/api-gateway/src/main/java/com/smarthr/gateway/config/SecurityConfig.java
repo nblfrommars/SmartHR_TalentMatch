@@ -38,6 +38,8 @@ public class SecurityConfig {
                         .pathMatchers("/actuator/health", "/error").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/users/register").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/v1/jobs/**").permitAll()
+                        // notification-service tự verify access token của kết nối WebSocket
+                        .pathMatchers(HttpMethod.GET, "/ws/notifications").permitAll()
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))

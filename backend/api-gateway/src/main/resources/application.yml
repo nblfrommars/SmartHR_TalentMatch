@@ -56,6 +56,44 @@ spring:
           uri: ${USER_SERVICE_URL:http://user-service:8081}
           predicates:
             - Path=/api/v1/positions/**,/api/v1/locations/**,/api/v1/skills/**
+        - id: ai-matching-internal
+          uri: no://op
+          predicates:
+            - Path=/api/v1/ai/internal/**
+          filters:
+            - SetStatus=404
+        - id: ai-matching-cv-parse
+          uri: ${AI_MATCHING_URL:http://ai-matching:8000}
+          predicates:
+            - Path=/api/v1/ai/cv/**
+          filters:
+            - RewritePath=/api/v1/ai/(?<segment>.*), /ai/$\{segment}
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userOrIpKeyResolver}"
+                redis-rate-limiter.replenishRate: 2
+                redis-rate-limiter.burstCapacity: 5
+        - id: ai-matching
+          uri: ${AI_MATCHING_URL:http://ai-matching:8000}
+          predicates:
+            - Path=/api/v1/ai/**
+          filters:
+            - RewritePath=/api/v1/ai/(?<segment>.*), /ai/$\{segment}
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userOrIpKeyResolver}"
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://notification-service:8084}
+          predicates:
+            - Path=/api/v1/notifications/**
+        # WebSocket: trình duyệt không gửi được header Authorization khi mở WebSocket nên route này
+        # được permitAll trong SecurityConfig; notification-service tự verify token (?access_token=)
+        - id: notification-service-ws
+          uri: ${NOTIFICATION_SERVICE_WS_URL:ws://notification-service:8084}
+          predicates:
+            - Path=/ws/notifications
 
 management:
   endpoints:
