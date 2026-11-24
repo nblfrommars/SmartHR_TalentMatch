@@ -91,6 +91,13 @@ header gốc, thêm header:
 | `x-dlq-error` | Thông báo lỗi (tối đa 1000 ký tự) |
 | `x-dlq-original-offset` | Offset ở topic gốc |
 
+Đẩy lại message từ DLQ sau khi sửa lỗi: `npm run dlq:replay -- --topic <topic gốc>` (xem README, mục Vận hành).
+
+**Vì sao thử lại ngay trong consumer mà không dùng topic retry riêng:** trong lúc thử lại (tối đa ~36 giây) partition
+đó bị chặn. Đổi lại, các event cùng key (cùng job / cùng đơn) luôn được xử lý đúng thứ tự, và không phải tạo, theo dõi
+thêm topic. Lỗi tạm thời ở đây hiếm (DB chập chờn, event apply tới trước `job.events`) và lượng message nhỏ, nên chưa
+cần topic retry. Cân nhắc lại khi `notification_kafka_consumer_lag` thường xuyên tăng vì thử lại.
+
 ## Kênh Postgres `LISTEN` / `NOTIFY` (nội bộ, trong `notification_db`)
 
 | Kênh | Ai phát | Payload |

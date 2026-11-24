@@ -15,7 +15,7 @@ export const notFound = (message) => new HttpError(404, 'Not Found', message);
 /** Cùng định dạng ErrorResponse của common-lib (Java): {timestamp, status, error, message, path}. */
 export function errorHandler(err, req, res, _next) {
   const status = err instanceof HttpError ? err.status : 500;
-  if (status >= 500) logger.error({ err, path: req.originalUrl }, 'Lỗi không xử lý được');
+  if (status >= 500) (req.log ?? logger).error({ err, path: req.originalUrl }, 'Lỗi không xử lý được');
   res.status(status).json({
     timestamp: new Date().toISOString(),
     status,

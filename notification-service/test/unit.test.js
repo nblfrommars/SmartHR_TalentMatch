@@ -5,6 +5,8 @@ import { parseEnvelope, PoisonMessageError } from '../src/kafka/envelope.js';
 import { decodeCursor, encodeCursor } from '../src/notifications/cursor.js';
 import { toNotificationDto } from '../src/notifications/notification-dto.js';
 import { toSocketMessage } from '../src/realtime/pg-listener.js';
+import { routeLabel } from '../src/http/request-logger.js';
+import { replayHeaders } from '../src/tools/dlq-replay.js';
 
 function envelopeBuffer(type, data, extra = {}) {
   return Buffer.from(
@@ -137,5 +139,26 @@ describe('toSocketMessage', () => {
 
   it('bỏ qua kênh lạ', () => {
     expect(toSocketMessage('other', {})).toBeNull();
+  });
+});
+
+describe('routeLabel', () => {
+  it('thay UUID bằng :id và gộp path lạ', () => {
+    expect(routeLabel(`/api/v1/notifications/${randomUUID()}/read`)).toBe('/api/v1/notifications/:id/read');
+    expect(routeLabel('/api/v1/notifications')).toBe('/api/v1/notifications');
+    expect(routeLabel('/health')).toBe('/health');
+    expect(routeLabel('/wp-admin/xyz')).toBe('other');
+  });
+});
+
+describe('replayHeaders', () => {
+  it('bỏ header x-dlq-*, giữ header gốc, tăng bộ đếm', () => {
+    const headers = {
+      'event-type': Buffer.from('job_application.created'),
+      'x-dlq-error': Buffer.from('lỗi'),
+      'x-dlq-original-offset': Buffer.from('3'),
+    };
+    expect(replayHeaders(headers)).toEqual({ 'event-type': headers['event-type'], 'x-dlq-replay-count': '1' });
+    expect(replayHeaders({ 'x-dlq-replay-count': Buffer.from('2') })['x-dlq-replay-count']).toBe('3');
   });
 });

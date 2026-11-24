@@ -1,5 +1,6 @@
 import { WebSocketServer } from 'ws';
 import { logger } from '../logger.js';
+import { wsAuthFailures } from '../metrics.js';
 
 // Mã đóng kết nối riêng của ứng dụng (dải 4000-4999)
 export const CLOSE_TOKEN_EXPIRED = 4001; // token hết hạn mà client chưa gửi token mới
@@ -68,7 +69,12 @@ export function attachWebSocketServer(
     let verifying = false;
     ws.isAlive = true;
 
-    const authTimer = setTimeout(() => ws.close(CLOSE_AUTH_FAILED, 'Authentication timeout'), authTimeoutMs);
+    function failAuth(reason, closeReason) {
+      wsAuthFailures.inc({ reason });
+      ws.close(CLOSE_AUTH_FAILED, closeReason);
+    }
+
+    const authTimer = setTimeout(() => failAuth('timeout', 'Authentication timeout'), authTimeoutMs);
 
     function scheduleExpiry(expiresAt) {
       clearTimeout(expiryTimer);
@@ -89,7 +95,7 @@ export function attachWebSocketServer(
       const token = parseAuthMessage(raw, isBinary);
       if (!token) {
         // Đã xác thực: client chỉ nhận, message khác bị bỏ qua. Chưa xác thực: phải là auth.
-        if (userId === null) ws.close(CLOSE_AUTH_FAILED, 'Expected auth message');
+        if (userId === null) failAuth('bad_message', 'Expected auth message');
         return;
       }
       if (verifying) return; // đang verify token trước, bỏ qua message auth dồn dập
@@ -99,7 +105,7 @@ export function attachWebSocketServer(
         identity = await verifyToken(token);
       } catch (err) {
         logger.debug({ err: err.message, userId }, 'WebSocket: token không hợp lệ');
-        ws.close(CLOSE_AUTH_FAILED, 'Invalid token');
+        failAuth('invalid_token', 'Invalid token');
         return;
       } finally {
         verifying = false;
@@ -118,7 +124,7 @@ export function attachWebSocketServer(
       // Gia hạn chỉ được bằng token của chính user đó, không cho đổi người trên kết nối đang mở
       if (identity.userId !== userId) {
         logger.warn({ userId }, 'WebSocket: gia hạn bằng token của user khác');
-        ws.close(CLOSE_AUTH_FAILED, 'Token belongs to another user');
+        failAuth('user_mismatch', 'Token belongs to another user');
         return;
       }
       scheduleExpiry(identity.expiresAt);
