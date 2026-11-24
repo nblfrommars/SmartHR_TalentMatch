@@ -39,8 +39,10 @@ _PAYLOAD_INDEXES: dict[Kind, dict[str, qm.PayloadSchemaType]] = {
         "salary_min": qm.PayloadSchemaType.INTEGER,
         "salary_max": qm.PayloadSchemaType.INTEGER,
         "location": qm.PayloadSchemaType.KEYWORD,
+        "location_ids": qm.PayloadSchemaType.KEYWORD,
         "work_mode": qm.PayloadSchemaType.KEYWORD,
         "industry": qm.PayloadSchemaType.KEYWORD,
+        "industry_ids": qm.PayloadSchemaType.KEYWORD,
         "level": qm.PayloadSchemaType.KEYWORD,
         "job_type": qm.PayloadSchemaType.KEYWORD,
         "required_skills": qm.PayloadSchemaType.KEYWORD,
@@ -147,6 +149,13 @@ class QdrantStore:
             sparse=vectors.get(SPARSE) or qm.SparseVector(indices=[], values=[]),  # type: ignore[arg-type]
             payload=found[0].payload or {},
         )
+
+    async def get_payload(self, kind: Kind, ref_id: str) -> dict[str, Any] | None:
+        """Chỉ đọc payload (không kèm vector), dùng cho kiểm tra quyền."""
+        found = await self.client.retrieve(
+            self.collection(kind), [point_id(ref_id)], with_payload=True, with_vectors=False
+        )
+        return (found[0].payload or {}) if found else None
 
     async def count(self, kind: Kind) -> int:
         return (await self.client.count(self.collection(kind), exact=True)).count

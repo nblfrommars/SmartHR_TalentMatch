@@ -60,7 +60,8 @@ def test_truncate_does_not_cut_words():
 def test_clean_text_pipeline():
     raw = unicodedata.normalize("NFD", "<b>Kỹ sư</b>   phần mềm\n\n\n\nEmail: a@b.com")
 
-    assert clean_text(raw) == unicodedata.normalize("NFC", "Kỹ sư phần mềm\n\nEmail:")
+    # nhãn "Email:" bị bỏ cùng địa chỉ email, không để lại nhãn trơ trọi
+    assert clean_text(raw) == unicodedata.normalize("NFC", "Kỹ sư phần mềm")
     assert clean_text(None) == ""
 
 
@@ -88,3 +89,36 @@ def test_segment_empty():
     assert segment("") == []
     assert segment(None) == []
     assert segment("  ...  ") == []
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Liên hệ: a@b.com, 0912345678.", ""),
+        ("Email: a@b.com | SĐT: 0912 345 678 | Web: github.com/x", ""),
+        ("Tôi tên A (a@b.com). Thích Java.", "Tôi tên A. Thích Java."),
+        ("Liên hệ: a@b.com hoặc 0912345678 để trao đổi", "để trao đổi"),
+        ("Email: a@b.com; phone: +84 912 345 678; Hà Nội", "Hà Nội"),
+        ("Liên hệ: a@b.com, 0912345678. Thích Java", "Thích Java"),
+        ("Backend dev. Liên hệ: a@b.com, 0912345678. Thích Java", "Backend dev. Thích Java"),
+        ("Đang học... Email: a@b.com. Thích Java", "Đang học... Thích Java"),
+        (
+            "Backend dev (Java, Spring). Email: x@y.vn\nKinh nghiệm: 3 năm",
+            "Backend dev (Java, Spring).\nKinh nghiệm: 3 năm",
+        ),
+    ],
+)
+def test_scrub_pii_leaves_no_dangling_labels_or_punctuation(raw, expected):
+    assert clean_text(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Skills: Java, C++, Node.js.",
+        "Thời gian: 2020 - 2023: làm Java",
+        "Dự án (cá nhân): web bán sách; công nghệ: React, Spring.",
+    ],
+)
+def test_text_without_pii_is_unchanged(text):
+    assert clean_text(text) == text

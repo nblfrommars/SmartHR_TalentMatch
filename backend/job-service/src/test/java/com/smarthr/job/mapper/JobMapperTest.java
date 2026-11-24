@@ -74,6 +74,7 @@ class JobMapperTest {
 
     private static UpdateJobReq request(JobSkillReq... skills) {
         UpdateJobReq req = new UpdateJobReq();
+        req.setCompanyName("Acme Corp");
         req.setTitle("Backend Developer");
         req.setDescription("desc");
         req.setLevel(JobLevel.SENIOR);

@@ -39,7 +39,7 @@ AI_QDRANT_URL=:memory: AI_EMBEDDING_PROVIDER=hashing AI_INTERNAL_API_ENABLED=tru
   uv run uvicorn app.main:app --port 8000
 ```
 
-Nạp job/CV qua `POST /ai/internal/events/job|cv`, rồi gọi `GET /ai/recommendations/jobs?cvId=...`. Chi tiết: [`docs/03-index-search-parse.md`](docs/03-index-search-parse.md).
+Nạp job/CV qua `POST /ai/internal/events/job|cv` (đúng message Kafka của job-service / user-cv), rồi gọi `GET /ai/recommendations/jobs?cvId=...`. Chi tiết: [`docs/03-index-search-parse.md`](docs/03-index-search-parse.md).
 
 ## Test và lint
 
@@ -85,3 +85,10 @@ doc.dense_text   # gửi đi embedding (OpenAI)
 doc.sparse_text  # đưa vào BM25 (fastembed)
 doc.payload      # lưu vào Qdrant để filter / re-score
 ```
+
+## Tài liệu
+
+- [`docs/01-khung-ban-dau.md`](docs/01-khung-ban-dau.md): khung service
+- [`docs/02-document-builder.md`](docs/02-document-builder.md): dựng document cho Qdrant
+- [`docs/03-index-search-parse.md`](docs/03-index-search-parse.md): encode, Qdrant, gợi ý, parse CV, Kafka
+- [`docs/04-bao-mat-openai-van-hanh.md`](docs/04-bao-mat-openai-van-hanh.md): phân quyền, match-score, cache, LLM, chống prompt injection

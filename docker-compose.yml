@@ -231,6 +231,10 @@ services:
         condition: service_started
       job-service:
         condition: service_started
+      ai-matching:
+        condition: service_started
+      notification-service:
+        condition: service_started
       redis:
         condition: service_healthy
       keycloak:
@@ -240,11 +244,76 @@ services:
       AUTH_JWK_SET_URI: http://keycloak:8080/realms/smarthr/protocol/openid-connect/certs
       USER_SERVICE_URL: http://user-service:8081
       JOB_SERVICE_URL: http://job-service:8082
+      AI_MATCHING_URL: http://ai-matching:8000
+      NOTIFICATION_SERVICE_URL: http://notification-service:8084
+      NOTIFICATION_SERVICE_WS_URL: ws://notification-service:8084
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174}
     ports:
       - "8080:8080"
+    networks:
+      - smarthr-net
+
+  ai-matching:
+    build:
+      context: ./ai-matching
+    container_name: smarthr-ai-matching
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      AI_ENVIRONMENT: local
+      # Kafka consumer: nhận job.events (job-service) và cv.profile.events (user-cv)
+      AI_KAFKA_ENABLED: "true"
+      AI_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AI_QDRANT_URL: http://qdrant:6333
+      # DB 1 để tách khỏi dữ liệu của api-gateway (rate limit) ở DB 0
+      AI_REDIS_URL: redis://redis:6379/1
+      AI_EMBEDDING_CACHE: redis
+      # Chưa có OpenAI key thì dùng "hashing" (chạy được, gợi ý kém chính xác hơn).
+      # Có key: đặt AI_EMBEDDING_PROVIDER=openai và OPENAI_API_KEY trong .env
+      AI_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-hashing}
+      AI_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_LLM_EXPLANATIONS: ${AI_LLM_EXPLANATIONS:-false}
+      # user-cv chưa có cờ "cho phép HR tìm kiếm": false = HR chưa tìm thấy CV nào
+      AI_CV_SEARCHABLE_DEFAULT: ${AI_CV_SEARCHABLE_DEFAULT:-false}
+      # API nội bộ nhận event qua HTTP chỉ dùng khi test; đã có Kafka nên tắt
+      AI_INTERNAL_API_ENABLED: "false"
+    ports:
+      # Chỉ để dev gọi thẳng / xem Swagger (http://localhost:8083/docs).
+      # Client thật đi qua api-gateway (/api/v1/ai/**)
+      - "${AI_MATCHING_PORT:-8083}:8000"
+    networks:
+      - smarthr-net
+
+  notification-service:
+    build:
+      context: ./notification-service
+    container_name: smarthr-notification-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/notification_db
+      # Nhận job.events (job-service) và job.application.events (user-cv)
+      KAFKA_ENABLED: "true"
+      KAFKA_BROKERS: kafka:9092
+      AUTH_ISSUER_URI: http://localhost:8180/realms/smarthr
+      AUTH_JWK_SET_URI: http://keycloak:8080/realms/smarthr/protocol/openid-connect/certs
+    ports:
+      # Chỉ để dev gọi thẳng. Client thật đi qua api-gateway (/api/v1/notifications, /ws/notifications)
+      - "${NOTIFICATION_SERVICE_PORT:-8084}:8084"
     networks:
       - smarthr-net
 

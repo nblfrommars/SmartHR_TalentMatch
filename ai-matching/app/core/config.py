@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     app_name: str = "ai-matching"
     environment: str = "dev"
     log_level: str = "INFO"
+    # Giải thích bằng LLM (cần AI_OPENAI_API_KEY): chỉ top-K kết quả, timeout ngắn, lỗi thì
+    # dùng template. Mặc định tắt (tốn thêm độ trễ và chi phí token)
+    llm_explanations: bool = False
+    llm_explain_top_k: int = 5
+    llm_explain_timeout_seconds: float = 3.0
+    # Cache kết quả gợi ý trong Redis (chỉ khi AI_EMBEDDING_CACHE=redis). 0 = tắt
+    rec_cache_ttl_seconds: int = 600
+    # true: bắt buộc có header X-User-Id (mọi request phải đi qua api-gateway).
+    # false (mặc định): cho phép service nội bộ gọi thẳng không kèm danh tính
+    require_identity: bool = False
     # Bật API nội bộ /ai/internal/* (nhận event qua HTTP thay Kafka) — chỉ dùng khi dev/test
     internal_api_enabled: bool = False
 
@@ -44,9 +54,27 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = None
     qdrant_jobs_collection: str = "jobs"
     qdrant_candidates_collection: str = "candidates"
+    qdrant_timeout_seconds: int = 30
+    # Lúc khởi động Qdrant có thể chưa sẵn sàng (docker-compose bật song song): thử lại tối đa
+    # chừng này lần, chờ tăng dần (1, 2, 4... tối đa 10 giây) trước khi báo lỗi
+    qdrant_startup_attempts: int = 10
 
     redis_url: str = "redis://localhost:6379/0"
+    # CV từ user-cv chưa có cờ "cho phép HR tìm kiếm"; tạm dùng giá trị mặc định này cho mọi CV.
+    # Mặc định false (bảo vệ dữ liệu cá nhân): HR chỉ tìm thấy CV khi bật AI_CV_SEARCHABLE_DEFAULT
+    cv_searchable_default: bool = False
+
+    # Kafka consumer: nhận job.events (job-service) và cv.profile.events (user-cv).
+    # Mặc định tắt để chạy dev/test không cần Kafka; bật bằng AI_KAFKA_ENABLED=true
+    kafka_enabled: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_group_id: str = "ai-matching"
+    kafka_job_topic: str = "job.events"
+    kafka_cv_topic: str = "cv.profile.events"
+    # Message lỗi sau kafka_max_attempts lần thử (hoặc sai định dạng) được đẩy sang "<topic>.dlq"
+    kafka_dlq_suffix: str = ".dlq"
+    kafka_max_attempts: int = 3
+    kafka_retry_backoff_seconds: float = 0.5
 
 
 @lru_cache

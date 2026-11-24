@@ -22,6 +22,8 @@ def job_filter(
     industries: Sequence[str] | None = None,
     salary_min: int | None = None,
     exclude_job_ids: Sequence[str] | None = None,
+    location_ids: Sequence[str] | None = None,
+    industry_ids: Sequence[str] | None = None,
 ) -> qm.Filter:
     must: list[qm.Condition] = [
         qm.FieldCondition(key="status", match=qm.MatchValue(value="OPEN")),
@@ -34,6 +36,11 @@ def job_filter(
         must.append(qm.FieldCondition(key="job_type", match=qm.MatchValue(value=job_type.value)))
     if inds := _keywords(industries):
         must.append(qm.FieldCondition(key="industry", match=qm.MatchAny(any=inds)))
+    # Lọc theo id (khuyến nghị cho FE, lấy từ /api/v1/locations và /api/v1/industries).
+    # location_ids của job gồm id của nó và id cấp cha, nên chọn tỉnh ra được cả job ở quận.
+    for key, ids in (("location_ids", location_ids), ("industry_ids", industry_ids)):
+        if ids:
+            must.append(qm.FieldCondition(key=key, match=qm.MatchAny(any=list(ids))))
     if salary_min is not None:
         # Khoảng lương giao nhau; job "thỏa thuận" (không có salary_max) vẫn được giữ
         must.append(
@@ -57,17 +64,41 @@ def candidate_filter(
     locations: Sequence[str] | None = None,
     levels: Sequence[Level] | None = None,
     min_years: float | None = None,
+    keep_unknown: bool = False,
 ) -> qm.Filter:
+    """keep_unknown=True: CV chưa có địa điểm / cấp bậc / số năm vẫn được giữ (không bị loại chỉ
+    vì thiếu dữ liệu, ví dụ CV từ user-cv chưa gửi tên địa điểm).
+    """
     must: list[qm.Condition] = [
         # Privacy: chỉ CV mà User chủ động cho phép tìm kiếm
         qm.FieldCondition(key="searchable", match=qm.MatchValue(value=True)),
     ]
+    conditions: list[tuple[str, qm.FieldCondition]] = []
     if locs := _keywords(locations):
-        must.append(qm.FieldCondition(key="location", match=qm.MatchAny(any=locs)))
+        conditions.append(
+            ("location", qm.FieldCondition(key="location", match=qm.MatchAny(any=locs)))
+        )
     if levels:
-        must.append(
-            qm.FieldCondition(key="level", match=qm.MatchAny(any=[lv.value for lv in levels]))
+        conditions.append(
+            (
+                "level",
+                qm.FieldCondition(key="level", match=qm.MatchAny(any=[lv.value for lv in levels])),
+            )
         )
     if min_years is not None:
-        must.append(qm.FieldCondition(key="years_experience", range=qm.Range(gte=min_years)))
+        conditions.append(
+            (
+                "years_experience",
+                qm.FieldCondition(key="years_experience", range=qm.Range(gte=min_years)),
+            )
+        )
+    for key, condition in conditions:
+        if keep_unknown:
+            must.append(
+                qm.Filter(
+                    should=[condition, qm.IsEmptyCondition(is_empty=qm.PayloadField(key=key))]
+                )
+            )
+        else:
+            must.append(condition)
     return qm.Filter(must=must)

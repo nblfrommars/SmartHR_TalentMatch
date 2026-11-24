@@ -73,3 +73,18 @@ def test_conflicting_alias_is_rejected():
 def test_canonical_names_map_to_themselves(normalizer):
     for canonical in ["spring boot", "node.js", "c++", "aws saa"]:
         assert normalizer.normalize(canonical) == canonical
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Vue 3", "vue.js"),
+        ("Java 17", "java"),
+        ("Python 3.11", "python"),
+        ("Angular v17", "angular"),
+        ("Web 3", "web 3"),  # phần còn lại không phải skill đã biết: giữ nguyên
+        ("ES6", "javascript"),  # alias có sẵn chứa số: không bị cắt
+    ],
+)
+def test_trailing_version_is_ignored_only_for_known_skills(raw, expected):
+    assert get_normalizer().normalize(raw) == expected

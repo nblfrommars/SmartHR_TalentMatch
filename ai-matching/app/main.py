@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     container = await build_container(get_settings())
     app.state.container = container
+    if container.consumer is not None:
+        container.consumer.start()  # chạy nền; Kafka chưa sẵn sàng thì tự kết nối lại
     try:
         yield
     finally:

@@ -29,9 +29,13 @@ class Level(StrEnum):
 
 
 class JobType(StrEnum):
+    """Khớp enum JobType của job-service."""
+
     FULL_TIME = "FULL_TIME"
     PART_TIME = "PART_TIME"
     CONTRACT = "CONTRACT"
+    INTERNSHIP = "INTERNSHIP"
+    FREELANCE = "FREELANCE"
 
 
 class WorkMode(StrEnum):

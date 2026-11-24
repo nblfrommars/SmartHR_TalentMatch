@@ -23,3 +23,10 @@ def test_correlation_id_is_generated_when_missing():
     response = client.get("/health")
 
     assert len(response.headers["X-Correlation-ID"]) == 32
+
+
+def test_tests_never_use_real_openai_key():
+    """Máy dev có thể có key thật trong ai-matching/.env: test không được dùng nó."""
+    from app.core.config import Settings
+
+    assert not Settings().openai_api_key
