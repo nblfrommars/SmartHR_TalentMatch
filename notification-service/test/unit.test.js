@@ -4,6 +4,7 @@ import { processMessage } from '../src/kafka/consumer.js';
 import { parseEnvelope, PoisonMessageError } from '../src/kafka/envelope.js';
 import { decodeCursor, encodeCursor } from '../src/notifications/cursor.js';
 import { toNotificationDto } from '../src/notifications/notification-dto.js';
+import { toSocketMessage } from '../src/realtime/pg-listener.js';
 
 function envelopeBuffer(type, data, extra = {}) {
   return Buffer.from(
@@ -121,5 +122,20 @@ describe('processMessage', () => {
     });
     expect(result).toBe('ignored');
     expect(sendToDlq).not.toHaveBeenCalled();
+  });
+});
+
+describe('toSocketMessage', () => {
+  it('notification_read: một id hoặc tất cả', () => {
+    expect(toSocketMessage('notification_read', { recipientId: 'u', ids: ['a'] })).toEqual({
+      userId: 'u', message: { type: 'notification.read', data: { ids: ['a'] } },
+    });
+    expect(toSocketMessage('notification_read', { recipientId: 'u', all: true, readAt: 't' })).toEqual({
+      userId: 'u', message: { type: 'notification.read_all', data: { readAt: 't' } },
+    });
+  });
+
+  it('bỏ qua kênh lạ', () => {
+    expect(toSocketMessage('other', {})).toBeNull();
   });
 });

@@ -22,6 +22,16 @@ export async function handleApplicationEvent(pool, envelope) {
   }
 }
 
+/**
+ * Event hiện chưa có tên ứng viên. Nếu user-cv thêm data.applicantName thì tự dùng,
+ * không cần sửa gì ở đây; chưa có thì ghi "Một ứng viên".
+ */
+function applicantNameOf(data) {
+  if (typeof data.applicantName !== 'string') return null;
+  const name = data.applicantName.trim();
+  return name ? name.slice(0, 100) : null;
+}
+
 async function handleApplicationCreated(pool, envelope) {
   const { data } = envelope;
   requireUuids(data, ['applicationId', 'jobId', 'applicantId'], envelope.type);
@@ -31,18 +41,22 @@ async function handleApplicationCreated(pool, envelope) {
     throw new JobSnapshotMissingError(`Chưa có snapshot cho job ${data.jobId}`);
   }
 
+  const applicantName = applicantNameOf(data);
   await insertNotification(pool, {
     recipientId: job.hr_user_id,
     type: 'APPLICATION_RECEIVED',
     title: 'Có ứng viên mới',
-    body: `Một ứng viên vừa ứng tuyển vào "${job.title}".`,
+    body: `${applicantName ?? 'Một ứng viên'} vừa ứng tuyển vào "${job.title}".`,
     entityType: 'APPLICATION',
     entityId: data.applicationId,
+    // FE dùng jobId để mở danh sách ứng viên (GET /api/v1/applications/jobs/{jobId} của user-cv)
+    // và applicationId để làm nổi bật đơn vừa nộp
     data: {
       applicationId: data.applicationId,
       jobId: data.jobId,
       jobTitle: job.title,
       applicantId: data.applicantId,
+      applicantName,
       appliedAt: data.appliedAt ?? null,
     },
     sourceEventId: envelope.eventId,

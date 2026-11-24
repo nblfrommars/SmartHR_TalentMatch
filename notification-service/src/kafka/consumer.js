@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Kafka, logLevel } from 'kafkajs';
+import { Kafka, logLevel, Partitioners } from 'kafkajs';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { parseEnvelope, PoisonMessageError } from './envelope.js';
@@ -55,7 +55,8 @@ export async function startConsumer(pool) {
     logLevel: logLevel.WARN,
   });
   const consumer = kafka.consumer({ groupId: config.kafka.groupId });
-  const producer = kafka.producer();
+  // DefaultPartitioner băm key bằng murmur2 giống producer Java, key DLQ giữ đúng partition như topic gốc
+  const producer = kafka.producer({ createPartitioner: Partitioners.DefaultPartitioner });
 
   async function sendToDlq(topic, message, err) {
     await producer.send({
@@ -74,6 +75,26 @@ export async function startConsumer(pool) {
     });
   }
 
+  // kafkajs tự khởi động lại khi gặp lỗi tạm thời (restart=true). Lỗi không thể khởi động lại thì
+  // consumer dừng mà process vẫn sống, service "chạy" nhưng không nhận event nữa: thoát để Docker
+  // (restart: unless-stopped) dựng lại.
+  let healthy = false;
+  consumer.on(consumer.events.GROUP_JOIN, () => {
+    healthy = true;
+  });
+  consumer.on(consumer.events.CRASH, ({ payload }) => {
+    healthy = false;
+    if (payload.restart) {
+      logger.warn({ err: payload.error?.message }, 'Kafka consumer crash, kafkajs sẽ tự khởi động lại');
+      return;
+    }
+    logger.fatal({ err: payload.error }, 'Kafka consumer crash không tự khởi động lại được, thoát process');
+    process.exit(1);
+  });
+  consumer.on(consumer.events.DISCONNECT, () => {
+    healthy = false;
+  });
+
   await producer.connect();
   await consumer.connect();
   // fromBeginning: lần đầu chạy phải đọc lại toàn bộ job.events để dựng đủ job_snapshots
@@ -84,8 +105,11 @@ export async function startConsumer(pool) {
   });
   logger.info({ topics: Object.keys(HANDLERS) }, 'Kafka consumer đã chạy');
 
-  return async function stop() {
-    await consumer.disconnect();
-    await producer.disconnect();
+  return {
+    isHealthy: () => healthy,
+    async stop() {
+      await consumer.disconnect();
+      await producer.disconnect();
+    },
   };
 }

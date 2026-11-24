@@ -5,6 +5,7 @@ import { runMigrations } from './db/migrate.js';
 import { createApp } from './http/app.js';
 import { startConsumer } from './kafka/consumer.js';
 import { logger } from './logger.js';
+import { startRetentionJob } from './maintenance/retention.js';
 import { ConnectionRegistry } from './realtime/connection-registry.js';
 import { startPgListener } from './realtime/pg-listener.js';
 import { createTokenVerifier } from './realtime/token-verifier.js';
@@ -14,16 +15,22 @@ const pool = createPool();
 await runMigrations(pool);
 
 const registry = new ConnectionRegistry();
-const server = http.createServer(createApp({ pool }));
+const listener = startPgListener({ connectionString: config.databaseUrl, registry });
+const consumer = config.kafka.enabled ? await startConsumer(pool) : null;
+if (!consumer) logger.warn('KAFKA_ENABLED=false: không nhận event, chỉ chạy REST và WebSocket');
+const retention = startRetentionJob(pool, config.retention);
+
+const checks = { listener: listener.isListening };
+if (consumer) checks.kafka = consumer.isHealthy;
+
+const server = http.createServer(createApp({ pool, checks }));
 const ws = attachWebSocketServer(server, {
   path: config.ws.path,
   heartbeatMs: config.ws.heartbeatMs,
+  allowedOrigins: config.ws.allowedOrigins,
   verifyToken: createTokenVerifier(config.auth),
   registry,
 });
-const stopListener = startPgListener({ connectionString: config.databaseUrl, registry });
-const stopConsumer = config.kafka.enabled ? await startConsumer(pool) : null;
-if (!stopConsumer) logger.warn('KAFKA_ENABLED=false: không nhận event, chỉ chạy REST và WebSocket');
 
 server.listen(config.port, () => {
   logger.info({ port: config.port, wsPath: config.ws.path }, 'notification-service đã chạy');
@@ -37,10 +44,11 @@ async function shutdown(signal) {
   const forceExit = setTimeout(() => process.exit(1), 10_000);
   forceExit.unref();
   try {
-    await stopConsumer?.();
+    retention.stop();
+    await consumer?.stop();
     await ws.close();
     await new Promise((resolve) => server.close(resolve));
-    await stopListener();
+    await listener.stop();
     await pool.end();
   } catch (err) {
     logger.error({ err }, 'Lỗi khi dừng');

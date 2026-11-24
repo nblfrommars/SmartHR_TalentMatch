@@ -39,5 +39,14 @@ export const config = Object.freeze({
   ws: Object.freeze({
     path: process.env.WS_PATH ?? '/ws/notifications',
     heartbeatMs: int('WS_HEARTBEAT_MS', 30000),
+    // Cùng biến và giá trị mặc định với gateway / user-service
+    allowedOrigins: list('CORS_ALLOWED_ORIGINS', ['http://localhost:5173', 'http://localhost:5174']),
+  }),
+
+  retention: Object.freeze({
+    intervalMs: int('RETENTION_INTERVAL_MS', 60 * 60 * 1000),
+    // Thông báo đã đọc giữ 90 ngày; chưa đọc cũng xóa sau 180 ngày
+    readDays: int('RETENTION_READ_DAYS', 90),
+    maxDays: int('RETENTION_MAX_DAYS', 180),
   }),
 });

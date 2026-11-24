@@ -2,18 +2,29 @@ import express from 'express';
 import { errorHandler, notFoundHandler } from './errors.js';
 import { notificationRoutes } from './notification-routes.js';
 
-export function createApp({ pool }) {
+/**
+ * @param checks các hàm trả về true/false cho từng thành phần chạy nền, vd
+ *   { kafka: () => consumer.isHealthy(), listener: () => listener.isListening() }.
+ *   Thành phần bị tắt (KAFKA_ENABLED=false) thì không truyền vào.
+ */
+export function createApp({ pool, checks = {} }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '100kb' }));
 
   app.get('/health', async (_req, res) => {
+    const components = {};
     try {
       await pool.query('SELECT 1');
-      res.json({ status: 'UP' });
+      components.db = 'UP';
     } catch {
-      res.status(503).json({ status: 'DOWN' });
+      components.db = 'DOWN';
     }
+    for (const [name, check] of Object.entries(checks)) {
+      components[name] = check() ? 'UP' : 'DOWN';
+    }
+    const up = Object.values(components).every((s) => s === 'UP');
+    res.status(up ? 200 : 503).json({ status: up ? 'UP' : 'DOWN', components });
   });
 
   app.use('/api/v1/notifications', notificationRoutes(pool));
