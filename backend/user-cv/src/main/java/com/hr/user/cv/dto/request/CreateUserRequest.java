@@ -32,7 +32,7 @@ public class CreateUserRequest {
 
     // --- USER only ---
     private Long positionId;
-    private Long workLocationId;
+    private UUID workLocationId;
     private UUID imageAttachmentId;
     private UUID cvAttachmentId;
     private String summary;

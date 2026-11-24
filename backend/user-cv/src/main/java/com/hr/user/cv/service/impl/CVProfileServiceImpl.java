@@ -29,7 +29,6 @@ import com.hr.user.cv.event.CVProfileSkillEventData;
 import com.hr.user.cv.service.AttachmentService;
 import com.hr.user.cv.repository.CVProfileRepository;
 import com.hr.user.cv.repository.AttachmentRepository;
-import com.hr.user.cv.repository.LocationRepository;
 import com.hr.user.cv.repository.PositionRepository;
 import com.hr.user.cv.repository.SkillRepository;
 import com.hr.user.cv.repository.UserRepository;
@@ -44,7 +43,6 @@ public class CVProfileServiceImpl {
     private final AttachmentRepository attachmentRepository;
     private final UserRepository userRepository;
     private final PositionRepository positionRepository;
-    private final LocationRepository locationRepository;
     private final SkillRepository skillRepository;
     private final CVProfileEventPublisher eventPublisher;
     private final AttachmentService attachmentService;
@@ -127,12 +125,6 @@ public class CVProfileServiceImpl {
     private void apply(CVProfile profile, CreateCVProfileRequest request, UUID userId) {
         if (request.getPositionId() != null && !positionRepository.existsById(request.getPositionId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Position not found");
-        }
-        if (request.getWorkLocationId() != null
-                && !locationRepository.findById(request.getWorkLocationId())
-                        .map(location -> location.isActive())
-                        .orElse(false)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work location not found or inactive");
         }
         profile.setPositionId(request.getPositionId());
         profile.setWorkLocationId(request.getWorkLocationId());

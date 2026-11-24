@@ -15,7 +15,6 @@ import org.springframework.web.server.ResponseStatusException;
 import com.hr.user.cv.repository.UserRepository;
 import com.hr.user.cv.repository.CVProfileRepository;
 import com.hr.user.cv.repository.HRProfileRepository;
-import com.hr.user.cv.repository.LocationRepository;
 import com.hr.user.cv.repository.SkillRepository;
 import com.hr.user.cv.entity.User;
 import com.hr.user.cv.entity.HRProfile;
@@ -49,7 +48,6 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final CVProfileRepository cvProfileRepository;
     private final HRProfileRepository hrProfileRepository;
-    private final LocationRepository locationRepository;
     private final SkillRepository skillRepository;
     private final UserMapper userMapper;
     private final KeycloakAdminClient keycloakAdminClient;
@@ -161,12 +159,6 @@ public class UserServiceImpl implements UserService {
         CVProfile profile = new CVProfile();
         profile.setUserId(userId);
         profile.setPositionId(req.getPositionId());
-        if (req.getWorkLocationId() != null
-                && !locationRepository.findById(req.getWorkLocationId())
-                        .map(location -> location.isActive())
-                        .orElse(false)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work location not found or inactive");
-        }
         profile.setWorkLocationId(req.getWorkLocationId());
         profile.setImageAttachmentId(req.getImageAttachmentId());
         profile.setCvAttachmentId(req.getCvAttachmentId());

@@ -55,7 +55,11 @@ spring:
         - id: user-service-master-data
           uri: ${USER_SERVICE_URL:http://user-service:8081}
           predicates:
-            - Path=/api/v1/positions/**,/api/v1/locations/**,/api/v1/skills/**
+            - Path=/api/v1/positions/**,/api/v1/skills/**
+        - id: job-service-reference-data
+          uri: ${JOB_SERVICE_URL:http://job-service:8082}
+          predicates:
+            - Path=/api/v1/locations/**,/api/v1/industries/**
 
 management:
   endpoints:

@@ -13,7 +13,7 @@ import lombok.Data;
 @Data
 public class CreateCVProfileRequest {
     private Long positionId;
-    private Long workLocationId;
+    private UUID workLocationId;
     private UUID imageAttachmentId;
     private UUID cvAttachmentId;
 

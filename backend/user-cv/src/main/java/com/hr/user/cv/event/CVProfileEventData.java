@@ -8,7 +8,7 @@ import com.hr.user.cv.enums.EduLevel;
 public record CVProfileEventData(
         UUID userId,
         Long positionId,
-        Long workLocationId,
+        UUID workLocationId,
         UUID cvAttachmentId,
         String cvAttachmentUrl,
         String summary,

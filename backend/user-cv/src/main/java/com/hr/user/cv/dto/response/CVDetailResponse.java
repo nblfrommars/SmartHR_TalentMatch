@@ -11,7 +11,7 @@ import lombok.Data;
 public class CVDetailResponse {
     private UUID userId;
     private Long positionId;
-    private Long workLocationId;
+    private UUID workLocationId;
     private UUID imageAttachmentId;
     private UUID cvAttachmentId;
     private String summary;

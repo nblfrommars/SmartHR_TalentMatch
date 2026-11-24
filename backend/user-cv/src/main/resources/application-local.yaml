@@ -14,7 +14,8 @@ spring:
         format_sql: true
 
   liquibase:
-    enabled: false # bật lại khi có db/changelog/db.changelog-master.yaml
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
 
   rabbitmq:
     host: localhost

@@ -25,7 +25,7 @@ public class CVProfile {
     private Long positionId;
 
     @Column(name = "work_location_id")
-    private Long workLocationId;
+    private UUID workLocationId;
 
     @Column(name = "image_attachment_id")
     private UUID imageAttachmentId;

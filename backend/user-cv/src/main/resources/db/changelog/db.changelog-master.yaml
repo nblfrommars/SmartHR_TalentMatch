@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: cv-profile-work-location-uuid
+      author: smarthr
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: cv_profile
+      changes:
+        - sql:
+            comment: Store the job-service location UUID instead of the removed local location ID.
+            sql: >
+              ALTER TABLE cv_profile
+              ALTER COLUMN work_location_id TYPE uuid
+              USING NULL::uuid;
+  - changeSet:
+      id: remove-user-service-location-table
+      author: smarthr
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: location
+      changes:
+        - sql:
+            comment: Location master data is owned by job-service now.
+            sql: DROP TABLE location;
