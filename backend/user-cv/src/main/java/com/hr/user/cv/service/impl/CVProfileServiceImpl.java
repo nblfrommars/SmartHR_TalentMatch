@@ -143,6 +143,9 @@ public class CVProfileServiceImpl {
         profile.setEducation(request.getEducation());
 
         profile.getSkills().clear();
+        if (cvProfileRepository.existsById(profile.getUserId())) {
+            cvProfileRepository.flush();
+        }
         Map<Long, Skill> skillById = new LinkedHashMap<>();
         Map<Long, Integer> yearsBySkillId = new HashMap<>();
         List<CVSkillRequest> requestedSkills = request.getSkills() == null ? List.of() : request.getSkills();
