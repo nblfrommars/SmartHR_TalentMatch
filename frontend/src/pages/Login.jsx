@@ -1,24 +1,45 @@
-import { useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { Button } from "../components/Form";
+import { Loading } from "../components/PageState";
+import PublicLayout from "../components/PublicLayout";
+import { homeFor } from "../lib/navigation";
 
 export default function Login() {
-  const { authenticated, login } = useAuth();
-  const navigate = useNavigate();
+  const { ready, authenticated, unavailable, hasRole, login } = useAuth();
 
-  useEffect(() => {
-    if (authenticated) navigate("/dashboard", { replace: true });
-  }, [authenticated, navigate]);
+  if (ready && authenticated) return <Navigate to={homeFor(hasRole)} replace />;
 
   return (
-    <main className="grid min-h-screen place-items-center bg-gradient-to-br from-cyan-50 via-white to-blue-50 px-6 py-12 text-slate-900">
-      <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl shadow-blue-100">
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-600">SmartHR</p>
-        <h1 className="mt-3 text-3xl font-bold text-slate-900">Đăng nhập</h1>
-        <p className="mt-3 text-slate-500">Đăng nhập an toàn với tài khoản Keycloak của bạn.</p>
-        <button onClick={() => login()} className="button mt-8 w-full">Đăng nhập với Keycloak</button>
-        <p className="mt-5 text-sm text-slate-500">Chưa có tài khoản? <Link to="/register" className="font-semibold text-cyan-600 hover:text-cyan-700">Đăng ký</Link></p>
-      </section>
-    </main>
+    <PublicLayout>
+      <div className="mx-auto max-w-md px-4 py-16">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-card">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-brand-600 text-lg font-bold text-white">T</span>
+          <h1 className="mt-4 text-2xl font-extrabold text-zinc-900">Đăng nhập TalentMatch</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Bạn sẽ được chuyển sang trang đăng nhập bảo mật (Keycloak), sau đó quay lại đây.
+          </p>
+          <div className="mt-6">
+            {!ready && <Loading label="Đang kết nối máy chủ đăng nhập..." />}
+            {ready && unavailable && (
+              <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+                Không kết nối được tới Keycloak (cổng 8180). Kiểm tra container keycloak đã chạy chưa.
+              </p>
+            )}
+            {ready && !unavailable && (
+              <Button onClick={() => login({ redirectUri: `${window.location.origin}/login` })} className="w-full">
+                Đăng nhập
+              </Button>
+            )}
+          </div>
+          <p className="mt-6 text-sm text-zinc-500">
+            Chưa có tài khoản?{" "}
+            <Link to="/register" className="font-semibold text-brand-600 hover:underline">
+              Đăng ký ngay
+            </Link>
+          </p>
+        </div>
+      </div>
+    </PublicLayout>
   );
 }

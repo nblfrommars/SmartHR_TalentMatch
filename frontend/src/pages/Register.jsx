@@ -1,68 +1,154 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import keycloak from "../auth/keycloak";
+import { useState } from "react";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { Button, Field } from "../components/Form";
+import PublicLayout from "../components/PublicLayout";
+import { ApiError } from "../lib/api";
+import { GENDER_LABELS } from "../lib/format";
+import { useToast } from "../lib/toastContext";
+import { inputClass } from "../lib/ui";
+import { userApi } from "../lib/userApi";
+
+const EMPTY = {
+  userName: "",
+  email: "",
+  password: "",
+  confirm: "",
+  fullName: "",
+  gender: "NOINFO",
+  dob: "",
+  role: "USER",
+};
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+function validate(form) {
+  const errors = {};
+  if (form.userName.trim().length < 3) errors.userName = "Tối thiểu 3 ký tự";
+  if (/\s/.test(form.userName.trim())) errors.userName = "Không được chứa khoảng trắng";
+  if (form.dob && form.dob >= today()) errors.dob = "Ngày sinh phải trước hôm nay";
+  if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) errors.email = "Email không hợp lệ";
+  if (form.password.length < 8) errors.password = "Tối thiểu 8 ký tự";
+  if (form.confirm !== form.password) errors.confirm = "Mật khẩu nhập lại không khớp";
+  return errors;
+}
 
 export default function Register() {
-  const { authenticated } = useAuth();
-  const navigate = useNavigate();
-  const [form, setForm] = useState({
-    userName: "",
-    email: "",
-    password: "",
-    fullName: "",
-    role: "USER",
-  });
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { ready, authenticated, login } = useAuth();
+  const toast = useToast();
+  const [form, setForm] = useState(EMPTY);
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (authenticated) navigate("/dashboard", { replace: true });
-  }, [authenticated, navigate]);
+  if (ready && authenticated) return <Navigate to="/login" replace />;
 
-  const update = (event) => setForm({ ...form, [event.target.name]: event.target.value });
+  const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }));
 
   async function submit(event) {
     event.preventDefault();
-    setError("");
-    setSubmitting(true);
-    const body = {
-      userName: form.userName,
-      email: form.email,
-      password: form.password,
-      fullName: form.fullName || null,
-      role: form.role,
-    };
+    const found = validate(form);
+    setErrors(found);
+    if (Object.keys(found).length) return;
+    setBusy(true);
     try {
-      const response = await fetch("/api/v1/users/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      await userApi.register({
+        userName: form.userName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        fullName: form.fullName.trim() || null,
+        gender: form.gender,
+        dob: form.dob || null, // "yyyy-MM-dd"
+        role: form.role,
       });
-      if (!response.ok) {
-        throw new Error(response.status === 409 ? "Username hoặc email đã tồn tại." : "Không thể đăng ký tài khoản.");
+      toast.success("Tạo tài khoản thành công. Đang chuyển sang trang đăng nhập...");
+      setTimeout(
+        () => login({ loginHint: form.email.trim(), redirectUri: `${window.location.origin}/login` }),
+        800,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setErrors({ userName: "Username hoặc email đã được sử dụng" });
+      } else if (error instanceof ApiError && error.status === 502) {
+        toast.error("Không tạo được tài khoản: api-gateway, user-service hoặc Keycloak chưa phản hồi. Vui lòng thử lại sau.");
+      } else {
+        setErrors(error instanceof ApiError ? error.fieldErrors() : {});
+        toast.error(error);
       }
-      await keycloak.login({ loginHint: form.email });
-    } catch (err) {
-      setError(err.message);
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
+  const input = (key, props = {}) => (
+    <input id={`reg-${key}`} value={form[key]} onChange={set(key)} aria-invalid={Boolean(errors[key])} className={inputClass} {...props} />
+  );
+
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
-      <form onSubmit={submit} className="mx-auto max-w-md space-y-5 rounded-2xl bg-white/10 p-8 shadow-xl">
-        <div><p className="text-sm text-cyan-300">SmartHR</p><h1 className="mt-2 text-3xl font-bold">Tạo tài khoản</h1></div>
-        <input name="userName" required minLength="3" placeholder="Username" value={form.userName} onChange={update} className="field" />
-        <input name="email" required type="email" placeholder="Email" value={form.email} onChange={update} className="field" />
-        <input name="password" required type="password" placeholder="Mật khẩu" value={form.password} onChange={update} className="field" />
-        <input name="fullName" placeholder="Họ và tên" value={form.fullName} onChange={update} className="field" />
-        <select name="role" value={form.role} onChange={update} className="field"><option value="USER">Ứng viên</option><option value="HR">HR freelance</option></select>
-        <p className="text-sm text-slate-400">Bạn có thể bổ sung thông tin CV hoặc công ty trong phần profile sau khi đăng nhập.</p>
-        {error && <p className="text-sm text-rose-300">{error}</p>}
-        <button disabled={submitting} className="button w-full">{submitting ? "Đang đăng ký..." : "Đăng ký"}</button>
-        <p className="text-center text-sm text-slate-300">Đã có tài khoản? <Link to="/login" className="text-cyan-300">Đăng nhập</Link></p>
-      </form>
-    </main>
+    <PublicLayout>
+      <div className="mx-auto max-w-md px-4 py-12">
+        <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-8 shadow-card">
+          <div>
+            <h1 className="text-2xl font-extrabold text-zinc-900">Tạo tài khoản</h1>
+            <p className="mt-1 text-sm text-zinc-500">Tham gia TalentMatch để tìm việc hoặc đăng tin tuyển dụng.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1 text-sm font-semibold">
+            {[
+              ["USER", "Tôi là ứng viên"],
+              ["HR", "Tôi là nhà tuyển dụng"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, role: value }))}
+                className={`rounded-lg px-3 py-2 transition ${form.role === value ? "bg-white text-brand-700 shadow-card" : "text-zinc-600"}`}
+                aria-pressed={form.role === value}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <Field label="Username" htmlFor="reg-userName" required error={errors.userName}>
+            {input("userName", { autoComplete: "username" })}
+          </Field>
+          <Field label="Email" htmlFor="reg-email" required error={errors.email}>
+            {input("email", { type: "email", autoComplete: "email" })}
+          </Field>
+          <Field label="Họ và tên" htmlFor="reg-fullName" error={errors.fullName}>
+            {input("fullName", { autoComplete: "name" })}
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Giới tính" htmlFor="reg-gender" error={errors.gender}>
+              <select id="reg-gender" value={form.gender} onChange={set("gender")} className={inputClass}>
+                {Object.entries(GENDER_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Ngày sinh" htmlFor="reg-dob" error={errors.dob}>
+              {input("dob", { type: "date", max: today() })}
+            </Field>
+          </div>
+          <Field label="Mật khẩu" htmlFor="reg-password" required error={errors.password}>
+            {input("password", { type: "password", autoComplete: "new-password" })}
+          </Field>
+          <Field label="Nhập lại mật khẩu" htmlFor="reg-confirm" required error={errors.confirm}>
+            {input("confirm", { type: "password", autoComplete: "new-password" })}
+          </Field>
+
+          <Button type="submit" busy={busy} className="w-full">
+            Đăng ký
+          </Button>
+          <p className="text-center text-sm text-zinc-500">
+            Đã có tài khoản?{" "}
+            <Link to="/login" className="font-semibold text-brand-600 hover:underline">
+              Đăng nhập
+            </Link>
+          </p>
+        </form>
+      </div>
+    </PublicLayout>
   );
 }

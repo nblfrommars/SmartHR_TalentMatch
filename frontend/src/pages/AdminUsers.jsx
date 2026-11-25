@@ -4,10 +4,11 @@ import AccountLayout from "../components/AccountLayout";
 import Badge from "../components/Badge";
 import { Empty, ErrorBox, Loading } from "../components/PageState";
 import { adminApi } from "../lib/adminApi";
-import { ROLE_LABELS } from "../lib/format";
+import { GENDER_LABELS, ROLE_LABELS, formatDate } from "../lib/format";
 import { inputClass } from "../lib/ui";
 
-const GENDER_LABELS = { MALE: "Nam", FEMALE: "Nữ", NOINFO: "—" };
+// Tài khoản tạo trước khi form đăng ký có trường giới tính đều là NOINFO
+const genderText = (gender) => (gender === "MALE" || gender === "FEMALE" ? GENDER_LABELS[gender] : "Chưa khai báo");
 
 /** Danh sách user (chỉ xem). Không có tạo user — đã bỏ theo quyết định của nhóm. */
 export default function AdminUsers() {
@@ -74,6 +75,7 @@ export default function AdminUsers() {
                 <th className="px-4 py-3">Họ tên</th>
                 <th className="px-4 py-3">Vai trò</th>
                 <th className="px-4 py-3">Giới tính</th>
+                <th className="px-4 py-3">Ngày sinh</th>
                 <th className="px-4 py-3">Trạng thái</th>
               </tr>
             </thead>
@@ -87,7 +89,8 @@ export default function AdminUsers() {
                       {ROLE_LABELS[u.role] || u.role}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-zinc-700">{GENDER_LABELS[u.gender] || "—"}</td>
+                  <td className="px-4 py-3 text-zinc-700">{genderText(u.gender)}</td>
+                  <td className="px-4 py-3 text-zinc-700">{formatDate(u.dob) || "Chưa khai báo"}</td>
                   <td className="px-4 py-3">
                     {u.active ? <Badge tone="success">Hoạt động</Badge> : <Badge>Bị khóa</Badge>}
                   </td>

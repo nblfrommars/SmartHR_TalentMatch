@@ -6,6 +6,16 @@ import { inputClass } from "../lib/ui";
 import { Button, Card, Field } from "./Form";
 import TreeSelect from "./TreeSelect";
 
+/**
+ * Bỏ "Thực tập" khỏi lựa chọn loại hình (yêu cầu của nhóm; cấp bậc "Thực tập sinh" vẫn giữ).
+ * Tin cũ đang là INTERNSHIP thì vẫn hiện để sửa không bị mất giá trị.
+ */
+function jobTypeOptions(current) {
+  return Object.fromEntries(
+    Object.entries(JOB_TYPE_LABELS).filter(([value]) => value !== "INTERNSHIP" || value === current),
+  );
+}
+
 const toVnd = (million) => (million === "" ? null : Math.round(Number(million) * 1_000_000));
 
 /** Kiểm tra phía client, khớp với ràng buộc của JobReq ở job-service. */
@@ -125,7 +135,7 @@ export default function JobForm({ initial, industries, locations, submitLabel, o
             {select("level", LEVEL_LABELS, "Chọn cấp bậc")}
           </Field>
           <Field label="Loại hình" htmlFor="job-jobType" required error={errors.jobType}>
-            {select("jobType", JOB_TYPE_LABELS, "Chọn loại hình")}
+            {select("jobType", jobTypeOptions(form.jobType), "Chọn loại hình")}
           </Field>
           <Field label="Hình thức làm việc" htmlFor="job-workMode" required error={errors.workMode}>
             {select("workMode", WORK_MODE_LABELS, "Chọn hình thức")}

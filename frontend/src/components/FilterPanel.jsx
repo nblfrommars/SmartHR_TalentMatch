@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { LEVEL_LABELS, toTree } from "../lib/format";
+import TreeSelect from "./TreeSelect";
 
 const SALARY_OPTIONS = [
   { value: "", label: "Tất cả mức lương" },
@@ -11,30 +12,6 @@ const SALARY_OPTIONS = [
 
 const fieldClass =
   "h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-brand-500";
-
-function TreeSelect({ id, value, onChange, tree, allLabel }) {
-  return (
-    <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className={fieldClass}>
-      <option value="">{allLabel}</option>
-      {tree.map((parent) =>
-        parent.children.length ? (
-          <optgroup key={parent.id} label={parent.name}>
-            <option value={parent.id}>Tất cả {parent.name}</option>
-            {parent.children.map((child) => (
-              <option key={child.id} value={child.id}>
-                {child.name}
-              </option>
-            ))}
-          </optgroup>
-        ) : (
-          <option key={parent.id} value={parent.id}>
-            {parent.name}
-          </option>
-        ),
-      )}
-    </select>
-  );
-}
 
 function Field({ label, htmlFor, children }) {
   return (
@@ -77,7 +54,8 @@ export default function FilterPanel({ values, industries = [], locations = [], o
           value={values.industryId || ""}
           onChange={(industryId) => onChange({ industryId })}
           tree={toTree(industries)}
-          allLabel="Tất cả ngành nghề"
+          placeholder="Tất cả ngành nghề"
+          className={fieldClass}
         />
       </Field>
 
@@ -87,7 +65,8 @@ export default function FilterPanel({ values, industries = [], locations = [], o
           value={values.locationId || ""}
           onChange={(locationId) => onChange({ locationId })}
           tree={toTree(locations)}
-          allLabel="Tất cả địa điểm"
+          placeholder="Tất cả địa điểm"
+          className={fieldClass}
         />
       </Field>
 

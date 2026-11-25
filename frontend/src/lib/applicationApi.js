@@ -6,6 +6,8 @@ export const applicationApi = {
     apiRequest(`/api/v1/applications/jobs/${jobId}`, { method: "POST", body, getToken }),
   mine: (getToken) => apiRequest("/api/v1/applications/me", { getToken }),
   withdraw: (id, getToken) => apiRequest(`/api/v1/applications/${id}`, { method: "DELETE", getToken }),
+  /** HR: danh sách đơn của một tin do chính mình đăng (user-cv kiểm tra quyền sở hữu qua job-service). */
+  forJob: (jobId, getToken) => apiRequest(`/api/v1/applications/jobs/${jobId}`, { getToken }),
 };
 
 export const APPLICATION_STATUS = {

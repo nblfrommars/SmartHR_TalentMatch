@@ -1,23 +1,23 @@
-import { apiRequest } from "./api";
+import { ApiError, apiRequest, toQuery } from "./api";
 
-// API công khai của job-service: không truyền getToken nên không gửi Bearer.
-
-function toQuery(params) {
-  const query = new URLSearchParams();
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") query.set(key, value);
-  });
-  const text = query.toString();
-  return text ? `?${text}` : "";
-}
+const BASE = "/api/v1/jobs";
 
 export const jobApi = {
-  search: (params) => apiRequest(`/api/v1/jobs${toQuery(params)}`),
-  get: (id) => apiRequest(`/api/v1/jobs/${encodeURIComponent(id)}`),
-  industries: () => apiRequest("/api/v1/jobs/industries"),
-  locations: () => apiRequest("/api/v1/jobs/locations"),
+  // Công khai
+  search: (params) => apiRequest(`${BASE}${toQuery(params)}`),
+  /** Gửi token nếu có: chủ job xem được cả tin đã đóng/hết hạn. */
+  get: (id, getToken) => apiRequest(`${BASE}/${encodeURIComponent(id)}`, { getToken }),
+  industries: () => apiRequest(`${BASE}/industries`),
+  locations: () => apiRequest(`${BASE}/locations`),
+
+  // HR (job-service tự verify JWT; cần role HR, sửa/đóng/xóa chỉ chủ tin)
+  mine: (params, getToken) => apiRequest(`${BASE}/my${toQuery(params)}`, { getToken }),
+  create: (body, getToken) => apiRequest(BASE, { method: "POST", body, getToken }),
+  update: (id, body, getToken) => apiRequest(`${BASE}/${id}`, { method: "PUT", body, getToken }),
+  close: (id, getToken) => apiRequest(`${BASE}/${id}/close`, { method: "PATCH", getToken }),
+  remove: (id, getToken) => apiRequest(`${BASE}/${id}`, { method: "DELETE", getToken }),
 };
 
 export function isNotFound(error) {
-  return typeof error?.message === "string" && error.message.startsWith("404");
+  return error instanceof ApiError && error.status === 404;
 }

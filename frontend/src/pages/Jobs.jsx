@@ -50,7 +50,9 @@ export default function Jobs() {
         else next.set(key, value);
       });
       if (!keepPage) next.delete("page");
-      setParams(next);
+      // replace: lọc/sắp xếp/chuyển trang chỉ thay URL hiện tại, không thêm mục vào lịch sử,
+      // nên nút "Quay lại" của trình duyệt về trang trước đó chứ không về từng bước lọc.
+      setParams(next, { replace: true });
       setResult((current) => ({ ...current, loading: true }));
     },
     [params, setParams],
@@ -93,7 +95,10 @@ export default function Jobs() {
               industries={industries}
               locations={locations}
               onChange={(changes) => update(changes)}
-              onReset={() => setParams(new URLSearchParams())}
+              onReset={() => {
+                setParams(new URLSearchParams(), { replace: true });
+                setResult((current) => ({ ...current, loading: true }));
+              }}
             />
           </div>
         </aside>

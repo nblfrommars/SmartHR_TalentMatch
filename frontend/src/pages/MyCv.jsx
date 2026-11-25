@@ -55,6 +55,25 @@ function toBody(form) {
   };
 }
 
+/**
+ * Backend nhận cả hồ sơ rỗng, nên frontend tự yêu cầu các mục tối thiểu để hồ sơ có ý nghĩa
+ * khi nhà tuyển dụng xem và khi AI gợi ý việc làm.
+ */
+function validateCv(form, catalog) {
+  const errors = {};
+  if (catalog.positions.length > 0 && !form.positionId) errors.positionId = "Vui lòng chọn vị trí mong muốn";
+  if (form.eduLevel === "") errors.eduLevel = "Vui lòng chọn trình độ học vấn";
+  if (!form.summary.trim()) errors.summary = "Vui lòng viết vài dòng giới thiệu bản thân";
+  else if (form.summary.length > 10000) errors.summary = "Tối đa 10000 ký tự";
+  const skills = form.skills.filter((s) => s.skill.trim());
+  if (skills.length === 0) errors.skills = "Cần ít nhất một kỹ năng";
+  else if (skills.some((s) => s.skill.trim().length > 100)) errors.skills = "Tên kỹ năng tối đa 100 ký tự";
+  else if (skills.some((s) => !(Number(s.years) >= 0 && Number.isInteger(Number(s.years))))) {
+    errors.skills = "Số năm kinh nghiệm phải là số nguyên không âm";
+  }
+  return errors;
+}
+
 /** Một ô file (ảnh đại diện / file CV): tải lên, xem, gỡ khỏi hồ sơ. */
 function FileSlot({ label, hint, accept, attachmentId, uploaded, image, onUploaded, onRemove }) {
   const { getToken } = useAuth();
@@ -186,10 +205,12 @@ export default function MyCv() {
 
   async function save(event) {
     event.preventDefault();
-    const found = {};
-    if (form.summary.length > 10000) found.summary = "Tối đa 10000 ký tự";
+    const found = validateCv(form, catalog);
     setErrors(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length) {
+      toast.error("Hồ sơ chưa đủ thông tin. Vui lòng điền các mục được đánh dấu *.");
+      return;
+    }
     setSaving(true);
     try {
       const body = toBody(form);
@@ -268,7 +289,12 @@ export default function MyCv() {
 
           <Card title="Thông tin nghề nghiệp">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Vị trí mong muốn" htmlFor="cv-position" error={errors.positionId}>
+              <Field
+                label="Vị trí mong muốn"
+                htmlFor="cv-position"
+                required={catalog.positions.length > 0}
+                error={errors.positionId}
+              >
                 <select id="cv-position" value={form.positionId} onChange={set("positionId")} className={inputClass}>
                   <option value="">Chọn vị trí</option>
                   {catalog.positions.map((p) => (
@@ -293,7 +319,7 @@ export default function MyCv() {
                   ))}
                 </select>
               </Field>
-              <Field label="Trình độ học vấn" htmlFor="cv-edu" error={errors.eduLevel}>
+              <Field label="Trình độ học vấn" htmlFor="cv-edu" required error={errors.eduLevel}>
                 <select id="cv-edu" value={form.eduLevel} onChange={set("eduLevel")} className={inputClass}>
                   <option value="">Chọn trình độ</option>
                   {EDU_LEVELS.map((e) => (
@@ -313,7 +339,14 @@ export default function MyCv() {
                 />
               </Field>
             </div>
-            <Field label="Giới thiệu bản thân" htmlFor="cv-summary" error={errors.summary} hint={`${form.summary.length}/10000 ký tự`} className="mt-4">
+            <Field
+              label="Giới thiệu bản thân"
+              htmlFor="cv-summary"
+              required
+              error={errors.summary}
+              hint={`${form.summary.length}/10000 ký tự`}
+              className="mt-4"
+            >
               <textarea
                 id="cv-summary"
                 rows={6}
@@ -338,7 +371,9 @@ export default function MyCv() {
               </Button>
             }
           >
-            {form.skills.length === 0 && <p className="text-sm text-zinc-500">Chưa có kỹ năng nào.</p>}
+            {form.skills.length === 0 && (
+              <p className="text-sm text-zinc-500">Chưa có kỹ năng nào. Hồ sơ cần ít nhất một kỹ năng.</p>
+            )}
             <div className="space-y-2">
               {form.skills.map((skill, index) => (
                 <div key={index} className="flex gap-2">

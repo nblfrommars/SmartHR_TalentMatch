@@ -4,7 +4,7 @@ import { useAuth } from "../auth/useAuth";
 import AccountLayout from "../components/AccountLayout";
 import Badge from "../components/Badge";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { Button } from "../components/Form";
+import { Button, ButtonLink } from "../components/Form";
 import { Empty, ErrorBox, Loading } from "../components/PageState";
 import Pagination from "../components/Pagination";
 import { JOB_STATUS_LABELS, deadlineLabel, formatDate, formatSalary } from "../lib/format";
@@ -67,7 +67,7 @@ export default function HrJobs() {
     const query = new URLSearchParams();
     if (next.status ?? status) query.set("status", next.status ?? status);
     if (next.page) query.set("page", String(next.page + 1));
-    setParams(query);
+    setParams(query, { replace: true });
   }
 
   async function runAction() {
@@ -141,14 +141,14 @@ export default function HrJobs() {
                         {job.status === "OPEN" && ` · ${deadlineLabel(job.deadline)}`}
                       </p>
                     </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <ButtonLink to={`/hr/jobs/${job.id}/applicants`} size="sm">
+                        Ứng viên
+                      </ButtonLink>
                       {job.status !== "CLOSED" && (
-                        <Link
-                          to={`/hr/jobs/${job.id}/edit`}
-                          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
-                        >
+                        <ButtonLink to={`/hr/jobs/${job.id}/edit`} tone="secondary" size="sm">
                           Sửa
-                        </Link>
+                        </ButtonLink>
                       )}
                       {job.status === "OPEN" && (
                         <Button tone="secondary" size="sm" onClick={() => setPending({ kind: "close", job })}>

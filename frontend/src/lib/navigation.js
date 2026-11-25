@@ -14,6 +14,7 @@ export function roleLinks(hasRole) {
   if (hasRole("ADMIN")) {
     links.push({ to: "/admin/users", label: "Người dùng" }, { to: "/admin/positions", label: "Vị trí" });
   }
+  links.push({ to: "/notifications", label: "Thông báo" });
   return links;
 }
 
