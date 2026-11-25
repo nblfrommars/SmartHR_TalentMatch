@@ -315,6 +315,7 @@ jobs:
       run:
         working-directory: frontend
     env:
+      NODE_VERSION: "22"
       CI: "true"
     steps:
       - uses: actions/checkout@v4
