@@ -64,7 +64,9 @@ export default function Jobs() {
   }
 
   const jobs = result.page?.content || [];
-  const filterKey = FILTER_KEYS.map((key) => values[key]).join("|");
+  // Dựng lại FilterPanel khi bộ lọc đổi từ ngoài (URL, nút xóa), trừ companyName:
+  // ô đó tự áp dụng khi đang gõ, dựng lại sẽ làm mất con trỏ của người dùng.
+  const filterKey = FILTER_KEYS.filter((key) => key !== "companyName").map((key) => values[key]).join("|");
 
   return (
     <PublicLayout>
@@ -94,7 +96,7 @@ export default function Jobs() {
               values={values}
               industries={industries}
               locations={locations}
-              onChange={(changes) => update(changes)}
+              onChange={update}
               onReset={() => {
                 setParams(new URLSearchParams(), { replace: true });
                 setResult((current) => ({ ...current, loading: true }));

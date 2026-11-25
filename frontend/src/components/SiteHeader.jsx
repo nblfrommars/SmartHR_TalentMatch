@@ -78,7 +78,7 @@ export default function SiteHeader() {
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2 text-lg font-extrabold text-brand-900">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm text-white">T</span>
-            TalentMatch
+            <span className="hidden sm:inline">TalentMatch</span>
           </Link>
           <nav className="hidden items-center gap-1 md:flex">
             <NavLink to="/jobs" className={navClass}>
@@ -90,8 +90,8 @@ export default function SiteHeader() {
               </NavLink>
             )}
             {authenticated && hasRole("HR") && (
-              <NavLink to="/hr/jobs" className={navClass}>
-                Nhà tuyển dụng
+              <NavLink to="/hr/jobs" end className={navClass}>
+                Tin tuyển dụng
               </NavLink>
             )}
             {authenticated && hasRole("ADMIN") && (
@@ -106,6 +106,19 @@ export default function SiteHeader() {
           <NavLink to="/jobs" className={(state) => `${navClass(state)} md:hidden`}>
             Việc làm
           </NavLink>
+          {ready && authenticated && hasRole("HR") && (
+            <>
+              <NavLink to="/hr/jobs" end className={(state) => `${navClass(state)} md:hidden`}>
+                Tin của tôi
+              </NavLink>
+              <Link
+                to="/hr/jobs/new"
+                className="inline-flex h-9 items-center gap-1 whitespace-nowrap rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                <span aria-hidden="true">+</span> Đăng tin
+              </Link>
+            </>
+          )}
           {!ready && <span className="h-8 w-24 animate-pulse rounded-full bg-zinc-100" />}
           {ready && authenticated && (
             <>

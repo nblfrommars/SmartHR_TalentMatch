@@ -8,7 +8,10 @@ import { GENDER_LABELS, ROLE_LABELS, formatDate } from "../lib/format";
 import { inputClass } from "../lib/ui";
 
 // Tài khoản tạo trước khi form đăng ký có trường giới tính đều là NOINFO
-const genderText = (gender) => (gender === "MALE" || gender === "FEMALE" ? GENDER_LABELS[gender] : "Chưa khai báo");
+// Không lọc theo "Quản trị viên": chỉ có tài khoản admin seed sẵn, lựa chọn đó thừa
+const FILTER_ROLES = ["USER", "HR"];
+
+const genderText =(gender) => (gender === "MALE" || gender === "FEMALE" ? GENDER_LABELS[gender] : "Chưa khai báo");
 
 /** Danh sách user (chỉ xem). Không có tạo user — đã bỏ theo quyết định của nhóm. */
 export default function AdminUsers() {
@@ -55,9 +58,9 @@ export default function AdminUsers() {
         />
         <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Lọc vai trò" className={`${inputClass} sm:w-52`}>
           <option value="">Tất cả vai trò</option>
-          {Object.entries(ROLE_LABELS).map(([value, label]) => (
+          {FILTER_ROLES.map((value) => (
             <option key={value} value={value}>
-              {label}
+              {ROLE_LABELS[value]}
             </option>
           ))}
         </select>

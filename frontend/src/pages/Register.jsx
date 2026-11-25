@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { Button, Field } from "../components/Form";
+import { Button, Field, PasswordInput } from "../components/Form";
 import PublicLayout from "../components/PublicLayout";
 import { ApiError } from "../lib/api";
 import { GENDER_LABELS } from "../lib/format";
@@ -81,6 +81,16 @@ export default function Register() {
   const input = (key, props = {}) => (
     <input id={`reg-${key}`} value={form[key]} onChange={set(key)} aria-invalid={Boolean(errors[key])} className={inputClass} {...props} />
   );
+  const password = (key) => (
+    <PasswordInput
+      id={`reg-${key}`}
+      value={form[key]}
+      onChange={set(key)}
+      aria-invalid={Boolean(errors[key])}
+      autoComplete="new-password"
+      className={inputClass}
+    />
+  );
 
   return (
     <PublicLayout>
@@ -132,10 +142,10 @@ export default function Register() {
             </Field>
           </div>
           <Field label="Mật khẩu" htmlFor="reg-password" required error={errors.password}>
-            {input("password", { type: "password", autoComplete: "new-password" })}
+            {password("password")}
           </Field>
           <Field label="Nhập lại mật khẩu" htmlFor="reg-confirm" required error={errors.confirm}>
-            {input("confirm", { type: "password", autoComplete: "new-password" })}
+            {password("confirm")}
           </Field>
 
           <Button type="submit" busy={busy} className="w-full">

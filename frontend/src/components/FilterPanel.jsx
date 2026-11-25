@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LEVEL_LABELS, toTree } from "../lib/format";
 import TreeSelect from "./TreeSelect";
 
@@ -24,12 +24,23 @@ function Field({ label, htmlFor, children }) {
   );
 }
 
+const COMPANY_DEBOUNCE_MS = 400;
+
 export default function FilterPanel({ values, industries = [], locations = [], onChange, onReset }) {
   const [company, setCompany] = useState(values.companyName || "");
+  const applied = values.companyName || "";
+
+  // Tên công ty tự lọc sau khi ngừng gõ (giống các ô chọn khác), không cần bấm nút
+  useEffect(() => {
+    const next = company.trim();
+    if (next === applied) return undefined;
+    const timer = setTimeout(() => onChange({ companyName: next }), COMPANY_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [company, applied, onChange]);
 
   function applyCompany(event) {
     event.preventDefault();
-    onChange({ companyName: company.trim() });
+    if (company.trim() !== applied) onChange({ companyName: company.trim() });
   }
 
   return (
@@ -103,21 +114,15 @@ export default function FilterPanel({ values, industries = [], locations = [], o
 
       <form onSubmit={applyCompany}>
         <Field label="Tên công ty" htmlFor="f-company">
-          <div className="flex gap-2">
-            <input
-              id="f-company"
-              value={company}
-              onChange={(event) => setCompany(event.target.value)}
-              placeholder="Nhập tên công ty"
-              className={fieldClass}
-            />
-            <button
-              type="submit"
-              className="rounded-lg bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              Lọc
-            </button>
-          </div>
+          <input
+            id="f-company"
+            type="search"
+            value={company}
+            onChange={(event) => setCompany(event.target.value)}
+            placeholder="Nhập tên công ty"
+            autoComplete="off"
+            className={fieldClass}
+          />
         </Field>
       </form>
     </div>

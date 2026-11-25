@@ -1,5 +1,35 @@
-
+import { useState } from "react";
 import { Link } from "react-router-dom";
+
+function EyeIcon({ off }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <path d="M3 3l18 18" />}
+    </svg>
+  );
+}
+
+/** Ô mật khẩu có nút hiện/ẩn ở bên phải. Nhận mọi props của <input>. */
+export function PasswordInput({ className = "", ...props }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input {...props} type={visible ? "text" : "password"} className={`${className} pr-11`} />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+        aria-pressed={visible}
+        title={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+        className="absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-zinc-400 hover:text-zinc-700"
+      >
+        <EyeIcon off={visible} />
+      </button>
+    </div>
+  );
+}
 
 export function Field({ label, htmlFor, error, hint, required, children, className = "" }) {
   return (

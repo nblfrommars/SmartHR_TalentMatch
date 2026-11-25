@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import JobCard from "./JobCard";
+
+afterEach(cleanup);
 
 const locations = [
   { id: "hn", name: "Hà Nội", parentId: null },
@@ -37,5 +39,25 @@ describe("JobCard", () => {
     expect(screen.getByText("Senior")).toBeTruthy();
     expect(screen.getByText("Java")).toBeTruthy();
     expect(screen.getByRole("link").getAttribute("href")).toBe(`/jobs/${job.id}`);
+  });
+
+  it("ẩn kỹ năng Điểm cộng (tiêu chí ngầm), vẫn hiện Bắt buộc và Yêu cầu", () => {
+    const withBonus = {
+      ...job,
+      skills: [
+        { skill: "Java", mustHave: true, required: true },
+        { skill: "Spring Boot", mustHave: false, required: true },
+        { skill: "Kubernetes", mustHave: false, required: false },
+      ],
+    };
+    render(
+      <MemoryRouter>
+        <JobCard job={withBonus} locations={locations} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Java")).toBeTruthy();
+    expect(screen.getByText("Spring Boot")).toBeTruthy();
+    expect(screen.queryByText("Kubernetes")).toBeNull();
   });
 });

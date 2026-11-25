@@ -21,15 +21,17 @@ import {
   formatSalary,
 } from "../lib/format";
 import { isNotFound, jobApi } from "../lib/jobApi";
+import { SKILL_KINDS, isPublicSkill, skillKind } from "../lib/jobFormModel";
 import { useToast } from "../lib/toastContext";
 import { inputClass } from "../lib/ui";
 import { useReferenceData } from "../lib/useReferenceData";
 import { userApi } from "../lib/userApi";
 
+const SKILL_TONES = { MUST: "danger", REQUIRED: "brand", BONUS: "neutral" };
+
 function skillBadge(entry) {
-  if (entry.mustHave) return <Badge tone="danger">Bắt buộc</Badge>;
-  if (entry.required !== false) return <Badge tone="brand">Yêu cầu</Badge>;
-  return <Badge>Điểm cộng</Badge>;
+  const kind = skillKind(entry);
+  return <Badge tone={SKILL_TONES[kind]}>{SKILL_KINDS[kind].label}</Badge>;
 }
 
 function InfoRow({ label, value }) {
@@ -106,12 +108,19 @@ function ApplyPanel({ job }) {
 
   if (state.existing) {
     const status = APPLICATION_STATUS[state.existing.status] || { label: state.existing.status, tone: "neutral" };
+    const withdrawn = state.existing.status === "WITHDRAWN";
     return (
       <div className="space-y-3 text-sm">
         <p className="text-zinc-700">
-          Bạn đã ứng tuyển lúc <strong>{formatDateTime(state.existing.appliedAt)}</strong>.
+          Bạn đã ứng tuyển lúc <strong>{formatDateTime(state.existing.appliedAt)}</strong>
+          {withdrawn ? " và đã rút đơn." : "."}
         </p>
         <Badge tone={status.tone}>{status.label}</Badge>
+        {withdrawn && (
+          <p className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
+            Mỗi tài khoản chỉ nộp được một đơn cho mỗi tin, kể cả khi đã rút. Bạn vẫn ứng tuyển các tin khác bình thường.
+          </p>
+        )}
         <Link to="/me/applications" className="block font-semibold text-brand-600 hover:underline">
           Xem các đơn đã nộp
         </Link>
@@ -250,7 +259,7 @@ function ActionPanel({ job, onChanged }) {
 
 export default function JobDetail() {
   const { id } = useParams();
-  const { ready, authenticated, getToken } = useAuth();
+  const { ready, authenticated, getToken, user, hasRole } = useAuth();
   const { industries, locations } = useReferenceData();
   const [state, setState] = useState({ loading: true, error: null, job: null });
   const [attempt, setAttempt] = useState(0);
@@ -272,6 +281,9 @@ export default function JobDetail() {
   const { job } = state;
   const days = job ? daysLeft(job.deadline) : null;
   const status = job ? JOB_STATUS_LABELS[job.status] : null;
+  // "Điểm cộng" là tiêu chí ngầm: chỉ HR chủ tin thấy (cùng điều kiện với OwnerPanel)
+  const isOwner = Boolean(job && ready && authenticated && hasRole("HR") && user?.id === job.createdBy);
+  const skills = (job?.skills || []).filter((entry) => isOwner || isPublicSkill(entry));
 
   return (
     <PublicLayout>
@@ -314,13 +326,14 @@ export default function JobDetail() {
                   <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700">{job.description}</p>
                 </Card>
 
-                {job.skills?.length > 0 && (
+                {skills.length > 0 && (
                   <Card title="Kỹ năng">
                     <ul className="flex flex-wrap gap-3">
-                      {job.skills.map((entry) => (
+                      {skills.map((entry) => (
                         <li key={entry.skill} className="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm">
                           <span className="font-medium text-zinc-800">{entry.skill}</span>
                           {skillBadge(entry)}
+                          {!isPublicSkill(entry) && <span className="text-xs text-zinc-400">(chỉ bạn thấy)</span>}
                         </li>
                       ))}
                     </ul>

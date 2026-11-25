@@ -7,7 +7,7 @@ import { Button, Card, Field } from "./Form";
 import TreeSelect from "./TreeSelect";
 
 /**
- * Bỏ "Thực tập" khỏi lựa chọn loại hình (yêu cầu của nhóm; cấp bậc "Thực tập sinh" vẫn giữ).
+ * Bỏ "Thực tập" khỏi lựa chọn loại hình (yêu cầu của nhóm; cấp bậc "Internship" vẫn giữ).
  * Tin cũ đang là INTERNSHIP thì vẫn hiện để sửa không bị mất giá trị.
  */
 function jobTypeOptions(current) {
@@ -40,6 +40,8 @@ function validate(form) {
   if (form.deadline && Date.parse(form.deadline) <= Date.now()) errors.deadline = "Hạn nộp phải ở tương lai";
   const skills = form.skills.filter((s) => s.skill.trim());
   if (skills.length === 0) errors.skills = "Cần ít nhất một kỹ năng";
+  // "Điểm cộng" bị ẩn với ứng viên: phải có ít nhất một kỹ năng hiện công khai
+  else if (skills.every((s) => s.kind === "BONUS")) errors.skills = "Cần ít nhất một kỹ năng mức Bắt buộc hoặc Yêu cầu";
   if (skills.length > 50) errors.skills = "Tối đa 50 kỹ năng";
   if (skills.some((s) => s.skill.trim().length > 50)) errors.skills = "Tên kỹ năng tối đa 50 ký tự";
   return errors;
@@ -112,7 +114,10 @@ export default function JobForm({ initial, industries, locations, submitLabel, o
   );
   const select = (key, labels, placeholder) => (
     <select id={`job-${key}`} value={form[key]} onChange={set(key)} aria-invalid={Boolean(errors[key])} className={inputClass}>
-      <option value="">{placeholder}</option>
+      {/* Placeholder chỉ hiện khi chưa chọn, không nằm trong danh sách lựa chọn */}
+      <option value="" disabled hidden>
+        {placeholder}
+      </option>
       {Object.entries(labels).map(([value, label]) => (
         <option key={value} value={value}>
           {label}
@@ -150,6 +155,7 @@ export default function JobForm({ initial, industries, locations, submitLabel, o
               onChange={setValue("industryId")}
               tree={toTree(industries)}
               placeholder="Chọn ngành nghề"
+              hidePlaceholder
               invalid={Boolean(errors.industryId)}
               className={inputClass}
             />
@@ -161,6 +167,7 @@ export default function JobForm({ initial, industries, locations, submitLabel, o
               onChange={setValue("locationId")}
               tree={toTree(locations)}
               placeholder="Chọn địa điểm"
+              hidePlaceholder
               invalid={Boolean(errors.locationId)}
               className={inputClass}
             />
@@ -231,6 +238,9 @@ export default function JobForm({ initial, industries, locations, submitLabel, o
                   </option>
                 ))}
               </select>
+              {skill.kind === "BONUS" && (
+                <span className="self-center whitespace-nowrap text-xs text-zinc-500">Ẩn với ứng viên</span>
+              )}
               <Button
                 tone="ghost"
                 onClick={() => setForm((f) => ({ ...f, skills: f.skills.filter((_, i) => i !== index) }))}
@@ -243,9 +253,17 @@ export default function JobForm({ initial, industries, locations, submitLabel, o
           ))}
         </div>
         {errors.skills && <p className="mt-2 text-xs text-red-600">{errors.skills}</p>}
-        <p className="mt-3 text-xs text-zinc-500">
-          "Bắt buộc phải có": thiếu kỹ năng này coi như không phù hợp. "Điểm cộng": không bắt buộc.
-        </p>
+        <ul className="mt-3 space-y-0.5 text-xs text-zinc-500">
+          <li>
+            <strong className="text-zinc-700">Bắt buộc</strong>: thiếu kỹ năng này coi như không phù hợp.
+          </li>
+          <li>
+            <strong className="text-zinc-700">Yêu cầu</strong>: nên có, thiếu thì bị trừ điểm phù hợp.
+          </li>
+          <li>
+            <strong className="text-zinc-700">Điểm cộng</strong>: tiêu chí ngầm, chỉ bạn thấy; ứng viên không thấy kỹ năng này.
+          </li>
+        </ul>
       </Card>
 
       <div className="flex justify-end gap-2">

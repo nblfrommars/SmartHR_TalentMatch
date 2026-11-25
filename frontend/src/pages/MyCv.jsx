@@ -296,7 +296,9 @@ export default function MyCv() {
                 error={errors.positionId}
               >
                 <select id="cv-position" value={form.positionId} onChange={set("positionId")} className={inputClass}>
-                  <option value="">Chọn vị trí</option>
+                  <option value="" disabled hidden>
+                    Chọn vị trí
+                  </option>
                   {catalog.positions.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -311,7 +313,9 @@ export default function MyCv() {
                 hint={catalog.locations.length ? undefined : "Danh mục địa điểm của user-service đang trống"}
               >
                 <select id="cv-location" value={form.workLocationId} onChange={set("workLocationId")} className={inputClass}>
-                  <option value="">Chọn địa điểm</option>
+                  <option value="" disabled hidden>
+                    Chọn địa điểm
+                  </option>
                   {catalog.locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -321,7 +325,9 @@ export default function MyCv() {
               </Field>
               <Field label="Trình độ học vấn" htmlFor="cv-edu" required error={errors.eduLevel}>
                 <select id="cv-edu" value={form.eduLevel} onChange={set("eduLevel")} className={inputClass}>
-                  <option value="">Chọn trình độ</option>
+                  <option value="" disabled hidden>
+                    Chọn trình độ
+                  </option>
                   {EDU_LEVELS.map((e) => (
                     <option key={e.value} value={e.value}>
                       {e.label}

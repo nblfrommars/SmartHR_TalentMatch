@@ -152,7 +152,7 @@ export default function MyApplications() {
       <ConfirmDialog
         open={Boolean(pending)}
         title="Rút đơn ứng tuyển?"
-        message="Nhà tuyển dụng sẽ không xem xét đơn này nữa. Bạn không thể ứng tuyển lại tin này."
+        message="Nhà tuyển dụng sẽ không xem xét đơn này nữa. Sau khi rút, bạn không thể nộp lại đơn cho chính tin này (các tin khác vẫn ứng tuyển bình thường)."
         confirmLabel="Rút đơn"
         busy={busy}
         onConfirm={withdraw}

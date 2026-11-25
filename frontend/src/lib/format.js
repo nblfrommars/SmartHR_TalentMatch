@@ -1,10 +1,10 @@
 export const LEVEL_LABELS = {
-  INTERN: "Thực tập sinh",
+  INTERN: "Internship",
   FRESHER: "Fresher",
   JUNIOR: "Junior",
   MIDDLE: "Middle",
   SENIOR: "Senior",
-  LEAD: "Lead",
+  LEAD: "Leader",
   MANAGER: "Quản lý",
 };
 

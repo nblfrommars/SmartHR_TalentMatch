@@ -1,5 +1,9 @@
-/** Select hai cấp (cha-con) cho ngành nghề và địa điểm; tree lấy từ toTree(). */
-export default function TreeSelect({ id, value, onChange, tree, placeholder, className, required, invalid }) {
+/**
+ * Select hai cấp (cha-con) cho ngành nghề và địa điểm; tree lấy từ toTree().
+ * hidePlaceholder: ô bắt buộc (form đăng tin) — placeholder chỉ hiện khi chưa chọn, không nằm trong danh sách.
+ * Ô lọc thì giữ placeholder ("Tất cả ...") làm một lựa chọn để bỏ lọc.
+ */
+export default function TreeSelect({ id, value, onChange, tree, placeholder, className, required, invalid, hidePlaceholder }) {
   return (
     <select
       id={id}
@@ -9,7 +13,9 @@ export default function TreeSelect({ id, value, onChange, tree, placeholder, cla
       onChange={(event) => onChange(event.target.value)}
       className={className}
     >
-      <option value="">{placeholder}</option>
+      <option value="" disabled={hidePlaceholder} hidden={hidePlaceholder}>
+        {placeholder}
+      </option>
       {tree.map((parent) =>
         parent.children.length ? (
           <optgroup key={parent.id} label={parent.name}>

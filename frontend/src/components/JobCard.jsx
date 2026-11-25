@@ -8,10 +8,12 @@ import {
   deadlineLabel,
   formatSalary,
 } from "../lib/format";
+import { isPublicSkill } from "../lib/jobFormModel";
 
 export default function JobCard({ job, locations = [] }) {
   const days = daysLeft(job.deadline);
-  const skills = (job.skills || []).slice(0, 3);
+  // Thẻ tin là giao diện công khai: không hiện kỹ năng "Điểm cộng" (tiêu chí ngầm của HR)
+  const skills = (job.skills || []).filter(isPublicSkill).slice(0, 3);
 
   return (
     <Link
