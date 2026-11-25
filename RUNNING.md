@@ -80,19 +80,19 @@ Mở terminal khác:
 ```bash
 cd frontend
 npm install
-npm run dev -- --port 5174
+npm run dev -- --port 5173
 ```
 
 Mở ứng dụng tại:
 
 ```text
-http://localhost:5174
+http://localhost:5173
 ```
 
 ## 5. Các địa chỉ local
 
 ```text
-Frontend:       http://localhost:5174
+Frontend:       http://localhost:5173
 user-service:   http://localhost:8081
 job-service:    http://localhost:8082
 Keycloak:       http://localhost:8180
@@ -207,26 +207,29 @@ file: <file cần upload>
 Lấy danh sách position:
 
 ```bash
-curl http://localhost:8081/api/positions
+curl http://localhost:8080/api/v1/positions        # qua api-gateway; cần Bearer token
 ```
 
 Lấy danh sách location:
 
 ```bash
-curl http://localhost:8081/api/locations
+curl http://localhost:8080/api/v1/locations        # qua api-gateway; cần Bearer token
+curl http://localhost:8080/api/v1/jobs/locations   # địa điểm của job-service (công khai)
+curl http://localhost:8080/api/v1/jobs/industries  # ngành nghề của job-service (công khai)
 ```
 
 Lấy danh sách user, cần token có role `ADMIN`:
 
 ```bash
-curl --location 'http://localhost:8081/api/users' \
+curl --location 'http://localhost:8080/api/v1/users' \
   --header 'Authorization: Bearer <access-token>'
 ```
 
-Tạo job cần các header `X-Company-Id`, `X-User-Id`, `X-User-Role` và token phù hợp:
+Tạo job cần token có role `HR` (job-service tự verify JWT của Keycloak, không dùng header `X-User-*`):
 
 ```http
-POST http://localhost:8082/api/v1/jobs
+POST http://localhost:8080/api/v1/jobs
+Authorization: Bearer <access-token của tài khoản HR>
 ```
 
 ## 10. Dừng project

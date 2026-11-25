@@ -47,9 +47,6 @@ public class Job {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "company_id", nullable = false)
-    private UUID companyId;
-
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 

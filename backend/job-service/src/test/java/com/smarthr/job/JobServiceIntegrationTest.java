@@ -3,6 +3,7 @@ package com.smarthr.job;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -26,6 +27,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -78,7 +81,6 @@ class JobServiceIntegrationTest {
     @Autowired OutboxRelayScheduler relay;
     @MockBean KafkaTemplate<String, String> kafkaTemplate;
 
-    private final UUID companyId = UUID.randomUUID();
     private final UUID userId = UUID.randomUUID();
 
     @BeforeEach
@@ -112,7 +114,7 @@ class JobServiceIntegrationTest {
         Map<String, Object> body = jobBody("Backend", List.of(
                 Map.of("skill", "Java", "mustHave", true),
                 Map.of("skill", "docker")));
-        mvc.perform(put("/api/v1/jobs/" + id).headers(hr()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/v1/jobs/" + id).with(hr()).contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.skills.length()").value(2))
@@ -125,7 +127,7 @@ class JobServiceIntegrationTest {
     void updatingOnlySkillsStillBumpsTheVersion() throws Exception {
         String id = createJob("Backend", skills("java")).get("id").asText();
 
-        mvc.perform(put("/api/v1/jobs/" + id).headers(hr()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/v1/jobs/" + id).with(hr()).contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(jobBody("Backend", skills("java", "kafka")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(1));
@@ -136,7 +138,7 @@ class JobServiceIntegrationTest {
         String token = "zq" + UUID.randomUUID().toString().substring(0, 8);
         createJob("Open " + token, skills("java"));
         String closedId = createJob("Closed " + token, skills("java")).get("id").asText();
-        mvc.perform(patch("/api/v1/jobs/" + closedId + "/close").headers(hr())).andExpect(status().isNoContent());
+        mvc.perform(patch("/api/v1/jobs/" + closedId + "/close").with(hr())).andExpect(status().isNoContent());
         saveRawJob("Expired " + token, JobStatus.OPEN, OffsetDateTime.now().minusDays(1));
         saveRawJob("Draft " + token, JobStatus.DRAFT, OffsetDateTime.now().plusDays(5));
 
@@ -144,6 +146,23 @@ class JobServiceIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].title").value("Open " + token));
+    }
+
+    @Test
+    void searchByCompanyNameIsCaseInsensitiveAndPartial() throws Exception {
+        String unique = "Co" + UUID.randomUUID().toString().substring(0, 8);
+        Map<String, Object> body = jobBody("Any title", skills("java"));
+        body.put("companyName", unique + " Holdings");
+        mvc.perform(post("/api/v1/jobs").with(hr()).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.companyName").value(unique + " Holdings"));
+
+        mvc.perform(get("/api/v1/jobs").param("companyName", unique.toUpperCase()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(get("/api/v1/jobs").param("companyName", "no-such-" + unique))
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
@@ -160,12 +179,12 @@ class JobServiceIntegrationTest {
     @Test
     void closedJobIsHiddenFromOthersButVisibleToItsOwner() throws Exception {
         String id = createJob("Hidden soon", skills("java")).get("id").asText();
-        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(hr())).andExpect(status().isNoContent());
+        mvc.perform(patch("/api/v1/jobs/" + id + "/close").with(hr())).andExpect(status().isNoContent());
 
         mvc.perform(get("/api/v1/jobs/" + id)).andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/jobs/" + id).header("X-Company-Id", UUID.randomUUID().toString()))
+        mvc.perform(get("/api/v1/jobs/" + id).with(asUser("HR", UUID.randomUUID())))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/jobs/" + id).header("X-Company-Id", companyId.toString()))
+        mvc.perform(get("/api/v1/jobs/" + id).with(hr()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CLOSED"));
     }
@@ -174,11 +193,11 @@ class JobServiceIntegrationTest {
     void closingTwiceEmitsOnlyOneEventAndClosedJobsCannotBeEdited() throws Exception {
         String id = createJob("Close me", skills("java")).get("id").asText();
 
-        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(hr())).andExpect(status().isNoContent());
-        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(hr())).andExpect(status().isNoContent());
+        mvc.perform(patch("/api/v1/jobs/" + id + "/close").with(hr())).andExpect(status().isNoContent());
+        mvc.perform(patch("/api/v1/jobs/" + id + "/close").with(hr())).andExpect(status().isNoContent());
 
         assertThat(eventTypes()).containsExactly("job.created", "job.closed");
-        mvc.perform(put("/api/v1/jobs/" + id).headers(hr()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/v1/jobs/" + id).with(hr()).contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(jobBody("Close me", skills("java")))))
                 .andExpect(status().isConflict());
     }
@@ -187,7 +206,7 @@ class JobServiceIntegrationTest {
     void deleteEmitsJobDeleted() throws Exception {
         String id = createJob("Delete me", skills("java")).get("id").asText();
 
-        mvc.perform(delete("/api/v1/jobs/" + id).headers(hr())).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/jobs/" + id).with(hr())).andExpect(status().isNoContent());
 
         assertThat(jobRepo.findById(UUID.fromString(id))).isEmpty();
         assertThat(eventTypes()).containsExactly("job.created", "job.deleted");
@@ -199,7 +218,7 @@ class JobServiceIntegrationTest {
         body.put("salaryMin", 50_000_000);
         body.put("salaryMax", 10_000_000);
 
-        mvc.perform(post("/api/v1/jobs").headers(hr()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/jobs").with(hr()).contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
@@ -207,12 +226,37 @@ class JobServiceIntegrationTest {
     }
 
     @Test
-    void onlyHrOfTheOwningCompanyCanModify() throws Exception {
+    void anonymousCannotWriteButCanReadPublicEndpoints() throws Exception {
+        mvc.perform(post("/api/v1/jobs").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/jobs/my")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/jobs")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/jobs/industries")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/jobs/locations")).andExpect(status().isOk());
+    }
+
+    @Test
+    void userRoleCannotManageJobsAndMyJobsListsOnlyOwn() throws Exception {
+        mvc.perform(post("/api/v1/jobs").with(asUser("USER", userId)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(jobBody("x", skills("java")))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/jobs/my").with(asUser("USER", userId))).andExpect(status().isForbidden());
+
+        createJob("Mine", skills("java"));
+        mvc.perform(get("/api/v1/jobs/my").with(hr()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(get("/api/v1/jobs/my").with(asUser("HR", UUID.randomUUID())))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void onlyTheCreatingHrCanModify() throws Exception {
         String id = createJob("Mine", skills("java")).get("id").asText();
 
-        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(headers("USER", companyId)))
+        mvc.perform(patch("/api/v1/jobs/" + id + "/close").with(asUser("USER", userId)))
                 .andExpect(status().isForbidden());
-        mvc.perform(patch("/api/v1/jobs/" + id + "/close").headers(headers("HR", UUID.randomUUID())))
+        mvc.perform(patch("/api/v1/jobs/" + id + "/close").with(asUser("HR", UUID.randomUUID())))
                 .andExpect(status().isForbidden());
     }
 
@@ -244,7 +288,7 @@ class JobServiceIntegrationTest {
     }
 
     private JsonNode createJob(String title, List<Map<String, Object>> skills) throws Exception {
-        ResultActions result = mvc.perform(post("/api/v1/jobs").headers(hr()).contentType(MediaType.APPLICATION_JSON)
+        ResultActions result = mvc.perform(post("/api/v1/jobs").with(hr()).contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(jobBody(title, skills))))
                 .andExpect(status().isCreated());
         return objectMapper.readTree(result.andReturn().getResponse().getContentAsString());
@@ -272,16 +316,14 @@ class JobServiceIntegrationTest {
         return java.util.Arrays.stream(names).map(n -> Map.<String, Object>of("skill", n)).toList();
     }
 
-    private org.springframework.http.HttpHeaders hr() {
-        return headers("HR", companyId);
+    private RequestPostProcessor hr() {
+        return asUser("HR", userId);
     }
 
-    private org.springframework.http.HttpHeaders headers(String role, UUID company) {
-        org.springframework.http.HttpHeaders h = new org.springframework.http.HttpHeaders();
-        h.add("X-User-Id", userId.toString());
-        h.add("X-User-Role", role);
-        h.add("X-Company-Id", company.toString());
-        return h;
+    /** Giả lập một JWT Keycloak: sub = id người dùng, role nằm trong realm_access.roles. */
+    private RequestPostProcessor asUser(String role, UUID user) {
+        return jwt().jwt(j -> j.subject(user.toString()).claim("realm_access", Map.of("roles", List.of(role))))
+                .authorities(new SimpleGrantedAuthority("ROLE_" + role));
     }
 
     private List<String> eventTypes() {
@@ -293,7 +335,6 @@ class JobServiceIntegrationTest {
 
     private Job saveRawJob(String title, JobStatus status, OffsetDateTime deadline) {
         return jobRepo.saveAndFlush(Job.builder()
-                .companyId(companyId)
                 .companyName("Acme Corp")
                 .createdBy(userId)
                 .title(title)
